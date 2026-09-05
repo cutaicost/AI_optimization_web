@@ -5,10 +5,10 @@ import secrets
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import case, delete, func, or_, select
+from sqlalchemy import case, delete, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from .auth import CSRF_COOKIE,SESSION_COOKIE,audit,bootstrap_admins,create_session,current_session,login_limited,public_user,require_admin,require_csrf,require_operational_user,require_user
+from .auth import CSRF_COOKIE,SESSION_COOKIE,audit,bootstrap_admins,create_session,current_session,enforce_rate_limit,login_limited,public_user,require_admin,require_csrf,require_operational_user,require_user
 from .config import VERSION,settings
 from .database import Base,SessionLocal,db_session,engine
 from .models import AuditEvent,ImportJob,LoginAttempt,Session as UserSession,TelemetryEvent,User
@@ -38,10 +38,14 @@ def set_session_cookies(response:Response,raw:str,csrf:str):
     response.set_cookie(CSRF_COOKIE,csrf,max_age=cfg.session_ttl_seconds,httponly=False,secure=cfg.cookie_secure,samesite="lax",path="/")
 
 @app.get("/api/v1/health")
-def health():return {"status":"healthy","version":VERSION,"uptime_seconds":round(monotonic()-STARTED,2),"database":engine.dialect.name}
+def health(db:Session=Depends(db_session)):
+    try:db.execute(text("SELECT 1"));database="connected";status="healthy"
+    except Exception:database="unavailable";status="degraded"
+    return {"status":status,"version":VERSION,"uptime_seconds":round(monotonic()-STARTED,2),"database":database}
 
 @app.post("/api/v1/auth/register",status_code=201)
-def register(payload:RegisterIn,db:Session=Depends(db_session)):
+def register(payload:RegisterIn,request:Request,db:Session=Depends(db_session)):
+    enforce_rate_limit(db,"registration",request.client.host if request.client else "unknown",10,60)
     username=payload.username.casefold();email=str(payload.email).casefold()
     if username in {"sith","beyond"}:
         raise HTTPException(409,"This username is reserved")
@@ -78,11 +82,16 @@ def me(user:User=Depends(require_user)):return {"user":public_user(user)}
 
 @app.post("/api/v1/auth/change-password",dependencies=[Depends(require_csrf)])
 def change_password(payload:PasswordChangeIn,user:User=Depends(require_user),db:Session=Depends(db_session)):
+    enforce_rate_limit(db,"password_change",user.id,8,15)
     if not verify_password(user.password_hash,payload.current_password):raise HTTPException(400,"Current password is incorrect")
     user.password_hash=hash_password(payload.new_password);user.must_change_password=False
     db.execute(delete(UserSession).where(UserSession.user_id==user.id));audit(db,"account.password_changed",actor=user.id,resource_type="user",resource_id=user.id);db.commit();return {"changed":True,"reauthentication_required":True}
 
-@app.put("/api/v1/profile",dependencies=[Depends(require_csrf)])
+@app.get("/api/v1/profile")
+def get_profile(user:User=Depends(require_user)):return {"user":public_user(user)}
+
+@app.patch("/api/v1/profile",dependencies=[Depends(require_csrf)])
+@app.put("/api/v1/profile",dependencies=[Depends(require_csrf)],include_in_schema=False)
 def update_profile(payload:ProfileIn,user:User=Depends(require_user),db:Session=Depends(db_session)):
     email=str(payload.email).casefold();existing=db.scalar(select(User.id).where(func.lower(User.email)==email,User.id!=user.id))
     if existing:raise HTTPException(409,"Email is already in use")
@@ -107,13 +116,21 @@ def clear_telemetry(user:User=Depends(require_operational_user),db:Session=Depen
 @app.get("/api/v1/admin/summary")
 def admin_summary(_:User=Depends(require_admin),db:Session=Depends(db_session)):
     total=db.scalar(select(func.count()).select_from(User)) or 0;active=db.scalar(select(func.count()).select_from(User).where(User.is_active.is_(True))) or 0
-    return {"users":{"total":total,"active":active,"disabled":total-active},"telemetry":db.scalar(select(func.count()).select_from(TelemetryEvent)) or 0,"recent_imports":db.scalar(select(func.count()).select_from(ImportJob)) or 0,"audit_events":db.scalar(select(func.count()).select_from(AuditEvent)) or 0,"health":"healthy"}
+    admins=db.scalar(select(func.count()).select_from(User).where(User.role=="ADMIN")) or 0
+    recent=db.scalars(select(AuditEvent).order_by(AuditEvent.timestamp.desc()).limit(5)).all()
+    return {"users":{"total":total,"active":active,"disabled":total-active,"admins":admins},"telemetry":db.scalar(select(func.count()).select_from(TelemetryEvent)) or 0,"recent_imports":db.scalar(select(func.count()).select_from(ImportJob)) or 0,"audit_events":db.scalar(select(func.count()).select_from(AuditEvent)) or 0,"recent_audit":[{"timestamp":r.timestamp,"action":r.action,"outcome":r.outcome} for r in recent],"health":"healthy","version":VERSION}
 
 @app.get("/api/v1/admin/users")
 def admin_users(q:str="",limit:int=Query(50,ge=1,le=200),offset:int=Query(0,ge=0),_:User=Depends(require_admin),db:Session=Depends(db_session)):
     query=select(User)
     if q:query=query.where(or_(User.username.ilike(f"%{q}%"),User.email.ilike(f"%{q}%"),User.display_name.ilike(f"%{q}%")))
     rows=db.scalars(query.order_by(User.created_at.desc()).offset(offset).limit(limit+1)).all();return {"items":[public_user(row) for row in rows[:limit]],"limit":limit,"offset":offset,"has_more":len(rows)>limit}
+
+@app.get("/api/v1/admin/users/{user_id}")
+def admin_user(user_id:str,_:User=Depends(require_admin),db:Session=Depends(db_session)):
+    target=db.get(User,user_id)
+    if not target:raise HTTPException(404,"User not found")
+    return {"user":public_user(target)}
 
 @app.patch("/api/v1/admin/users/{user_id}",dependencies=[Depends(require_csrf)])
 def admin_update_user(user_id:str,payload:AdminUserUpdateIn,admin:User=Depends(require_admin),db:Session=Depends(db_session)):
@@ -129,5 +146,16 @@ def admin_update_user(user_id:str,payload:AdminUserUpdateIn,admin:User=Depends(r
     audit(db,"admin.user_updated",actor=admin.id,resource_type="user",resource_id=target.id,role=target.role,is_active=target.is_active);db.commit();return {"user":public_user(target)}
 
 @app.get("/api/v1/admin/audit")
-def admin_audit(limit:int=Query(100,ge=1,le=500),offset:int=Query(0,ge=0),_:User=Depends(require_admin),db:Session=Depends(db_session)):
-    rows=db.scalars(select(AuditEvent).order_by(AuditEvent.timestamp.desc()).offset(offset).limit(limit+1)).all();return {"items":[{"id":r.id,"timestamp":r.timestamp,"actor_user_id":r.actor_user_id,"action":r.action,"outcome":r.outcome,"resource_type":r.resource_type,"resource_id":r.resource_id,"metadata":r.metadata_json} for r in rows[:limit]],"has_more":len(rows)>limit}
+def admin_audit(q:str="",action:str="",outcome:str="",limit:int=Query(100,ge=1,le=500),offset:int=Query(0,ge=0),_:User=Depends(require_admin),db:Session=Depends(db_session)):
+    query=select(AuditEvent)
+    if q:query=query.where(or_(AuditEvent.action.ilike(f"%{q}%"),AuditEvent.resource_type.ilike(f"%{q}%"),AuditEvent.resource_id.ilike(f"%{q}%")))
+    if action:query=query.where(AuditEvent.action==action)
+    if outcome:query=query.where(AuditEvent.outcome==outcome)
+    rows=db.scalars(query.order_by(AuditEvent.timestamp.desc()).offset(offset).limit(limit+1)).all();return {"items":[{"id":r.id,"timestamp":r.timestamp,"actor_user_id":r.actor_user_id,"action":r.action,"outcome":r.outcome,"resource_type":r.resource_type,"resource_id":r.resource_id,"metadata":r.metadata_json} for r in rows[:limit]],"limit":limit,"offset":offset,"has_more":len(rows)>limit}
+
+@app.get("/api/v1/admin/system")
+def admin_system(_:User=Depends(require_admin),db:Session=Depends(db_session)):
+    db.execute(text("SELECT 1"))
+    try:migration=db.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none() or "unversioned"
+    except Exception:migration="unversioned"
+    return {"application_version":VERSION,"api_version":"v1","database":"connected","uptime_seconds":round(monotonic()-STARTED,2),"user_count":db.scalar(select(func.count()).select_from(User)) or 0,"migration":migration,"environment":cfg.environment}

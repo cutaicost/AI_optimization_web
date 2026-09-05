@@ -11,7 +11,9 @@ Requirements: Python 3.12+, Node.js 22+, and PowerShell.
 1. Copy `.env.example` to `.env` and provide development values. Admin passwords must be at least 12 characters; omit them if bootstrap accounts are not needed.
 2. Create `.venv`, install `apps/api/requirements.txt`, and run `npm install`.
 3. Run `alembic upgrade head`.
-4. Run `./scripts/dev.ps1` and open `http://127.0.0.1:3000`.
+4. Run `npm run dev` and open `http://127.0.0.1:3000`.
+
+Use `npm run dev:web` and `npm run dev:api` when separate terminals are preferable.
 
 The API is served on port 8000 and Vite proxies `/api` to it. Development defaults to SQLite; production uses PostgreSQL.
 

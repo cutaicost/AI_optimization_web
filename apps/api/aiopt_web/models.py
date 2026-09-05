@@ -89,6 +89,14 @@ class LoginAttempt(Base):
     attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
     successful: Mapped[bool] = mapped_column(Boolean, default=False)
 
+class RateLimitEvent(Base):
+    __tablename__ = "rate_limit_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
+    action: Mapped[str] = mapped_column(String(40), index=True)
+    subject_hash: Mapped[str] = mapped_column(String(64), index=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    __table_args__ = (Index("ix_rate_limit_action_subject_time", "action", "subject_hash", "occurred_at"),)
+
 # Reserved durable entities for incremental feature migration.
 class ForecastRun(Base):
     __tablename__="forecast_runs"; id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);result:Mapped[dict]=mapped_column(JSON,default=dict)

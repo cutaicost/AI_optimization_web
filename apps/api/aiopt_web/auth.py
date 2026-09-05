@@ -6,7 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 from .config import settings
 from .database import db_session
-from .models import AuditEvent, LoginAttempt, Session as UserSession, User
+from .models import AuditEvent, LoginAttempt, RateLimitEvent, Session as UserSession, User
 from .security import digest, expires, hash_password, opaque_token, utcnow, verify_password
 
 SESSION_COOKIE="aiopt_session";CSRF_COOKIE="aiopt_csrf"
@@ -51,6 +51,12 @@ def login_limited(db:Session,identity:str):
     key=sha256(identity.casefold().encode()).hexdigest();cutoff=utcnow()-timedelta(minutes=15)
     failures=db.scalar(select(func.count()).select_from(LoginAttempt).where(LoginAttempt.identity_hash==key,LoginAttempt.attempted_at>=cutoff,LoginAttempt.successful.is_(False))) or 0
     return failures>=8,key
+
+def enforce_rate_limit(db:Session,action:str,subject:str,limit:int,minutes:int=15):
+    key=digest(subject.casefold());cutoff=utcnow()-timedelta(minutes=minutes)
+    count=db.scalar(select(func.count()).select_from(RateLimitEvent).where(RateLimitEvent.action==action,RateLimitEvent.subject_hash==key,RateLimitEvent.occurred_at>=cutoff)) or 0
+    if count>=limit:raise HTTPException(429,"Too many attempts. Try again later")
+    db.add(RateLimitEvent(action=action,subject_hash=key));db.commit()
 
 def create_session(db:Session,user:User):
     raw=opaque_token();csrf=opaque_token();db.add(UserSession(user_id=user.id,token_hash=digest(raw),csrf_hash=digest(csrf),expires_at=expires(settings().session_ttl_seconds)));return raw,csrf

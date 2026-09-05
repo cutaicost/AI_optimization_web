@@ -70,7 +70,8 @@ def test_password_change_requires_current_password_and_revokes_session(client):
 
 def test_profile_update(client):
     register(client);login(client)
-    response=client.put("/api/v1/profile",headers=csrf(client),json={"display_name":"Updated","email":"updated@example.com","organization":"Example","job_title":"FinOps","preferences":{"theme":"dark"}})
+    assert client.get("/api/v1/profile").status_code==200
+    response=client.patch("/api/v1/profile",headers=csrf(client),json={"display_name":"Updated","email":"updated@example.com","organization":"Example","job_title":"FinOps","preferences":{"theme":"dark"}})
     assert response.status_code==200;assert response.json()["user"]["display_name"]=="Updated"
 
 def test_admin_bootstrap_is_exact_idempotent_and_does_not_reset_password(client):
@@ -85,6 +86,8 @@ def test_rbac_admin_users_and_final_admin_protection(client):
     assert client.post("/api/v1/auth/change-password",headers=csrf(client),json={"current_password":os.environ["ADMIN_SITH_PASSWORD"],"new_password":"ChangedAdminPassword456"}).status_code==200
     assert login(client,"Sith","ChangedAdminPassword456").status_code==200
     users=client.get("/api/v1/admin/users").json()["items"];ordinary=next(user for user in users if user["username"]=="ordinary")
+    detail=client.get(f"/api/v1/admin/users/{ordinary['id']}");assert detail.status_code==200;assert "password_hash" not in detail.text
+    system=client.get("/api/v1/admin/system");assert system.status_code==200;assert "session_secret" not in system.text.lower()
     assert client.patch(f"/api/v1/admin/users/{ordinary['id']}",headers=csrf(client),json={"is_active":False}).status_code==200
     with SessionLocal() as db:
         beyond=db.scalar(select(User).where(User.username=="Beyond"));beyond.is_active=False;db.commit();sith=db.scalar(select(User).where(User.username=="Sith"));sith_id=sith.id
@@ -100,4 +103,4 @@ def test_postgresql_schema_compiles():
     for table in Base.metadata.sorted_tables:assert "CREATE TABLE" in str(CreateTable(table).compile(dialect=postgresql.dialect()))
 
 def test_protected_routes_require_authentication(client):
-    for path in ("/api/v1/auth/me","/api/v1/overview","/api/v1/admin/summary","/api/v1/admin/users","/api/v1/admin/audit"):assert client.get(path).status_code==401
+    for path in ("/api/v1/auth/me","/api/v1/profile","/api/v1/overview","/api/v1/admin/summary","/api/v1/admin/users","/api/v1/admin/audit","/api/v1/admin/system"):assert client.get(path).status_code==401
