@@ -11,6 +11,8 @@
 - Idempotent bootstrap for exactly `Sith` and `Beyond`; passwords come only from environment variables, are stored only as hashes, and require immediate replacement.
 - Audit metadata drops keys that appear credential-bearing. Password hashes are never included in response schemas.
 - The final active administrator cannot be disabled or demoted.
+- Import identifiers are owner-scoped on every route. Uploads use random server-controlled paths, bounded streaming reads, explicit state transitions, size/type checks, and cleanup; client filenames never become paths.
+- Analytics aggregate in SQL with mandatory owner predicates. Personal reset deletes only the caller's telemetry/import records and is audited.
 
 ## Operational requirements
 

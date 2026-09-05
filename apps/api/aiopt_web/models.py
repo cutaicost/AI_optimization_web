@@ -50,18 +50,35 @@ class TelemetryEvent(Base):
     duration_ms: Mapped[float] = mapped_column(Float, default=0)
     estimated_cost: Mapped[float] = mapped_column(Float, default=0)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
-    __table_args__ = (Index("ix_telemetry_owner_time", "user_id", "timestamp"),)
+    source: Mapped[str] = mapped_column(String(50), default="api")
+    import_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (Index("ix_telemetry_owner_time", "user_id", "timestamp"),Index("ix_telemetry_owner_model", "user_id", "model"),Index("ix_telemetry_owner_provider", "user_id", "provider"),Index("ix_telemetry_owner_application", "user_id", "application"),)
 
 class ImportJob(Base):
     __tablename__ = "import_jobs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     filename: Mapped[str] = mapped_column(String(255))
-    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    file_format: Mapped[str] = mapped_column(String(10), default="csv")
+    storage_id: Mapped[str] = mapped_column(String(64), unique=True)
+    status: Mapped[str] = mapped_column(String(30), default="CREATED", index=True)
     rows_total: Mapped[int] = mapped_column(Integer, default=0)
+    rows_processed: Mapped[int] = mapped_column(Integer, default=0)
+    rows_valid: Mapped[int] = mapped_column(Integer, default=0)
     rows_imported: Mapped[int] = mapped_column(Integer, default=0)
     rows_rejected: Mapped[int] = mapped_column(Integer, default=0)
+    mapping: Mapped[dict] = mapped_column(JSON, default=dict)
+    sample_rows: Mapped[list] = mapped_column(JSON, default=list)
+    rejected_rows_json: Mapped[list] = mapped_column(JSON, default=list)
+    detected_encoding: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    detected_delimiter: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (Index("ix_import_owner_status", "user_id", "status"),Index("ix_import_owner_created", "user_id", "created_at"),)
 
 class Budget(Base):
     __tablename__ = "budgets"

@@ -1,6 +1,6 @@
 # AI Optimization Tool Web
 
-Version 0.2.0 establishes the web-first foundation for AI Optimization Tool: a Vite frontend, FastAPI API, SQLAlchemy persistence, server-side sessions, user-owned telemetry, and an administrator control plane.
+Version 0.2.0 establishes the web-first foundation for AI Optimization Tool: a Vite frontend, FastAPI API, SQLAlchemy persistence, server-side sessions, owner-scoped streaming telemetry imports and analytics, and an administrator control plane.
 
 This repository is independent from the desktop application. The first milestone intentionally delivers the platform shell and a secure end-to-end vertical slice; remaining analytics screens identify the next desktop capability to migrate instead of presenting placeholder results as real data.
 
@@ -37,3 +37,5 @@ npm audit
 ```
 
 Architecture, security, migration decisions, and operations are documented in [`docs/`](docs/).
+
+The telemetry schema, import state machine, limits, ownership rules, and next migration stage are documented in [`docs/TELEMETRY.md`](docs/TELEMETRY.md).

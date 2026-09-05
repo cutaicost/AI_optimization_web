@@ -32,3 +32,11 @@ class PasswordChangeIn(StrictModel):
 class ProfileIn(StrictModel): display_name:str=Field(min_length=1,max_length=100);email:EmailStr;organization:str|None=Field(None,max_length=120);job_title:str|None=Field(None,max_length=120);preferences:dict=Field(default_factory=dict)
 class AdminUserUpdateIn(StrictModel): role:str|None=Field(None,pattern=r"^(ADMIN|USER)$");is_active:bool|None=None
 class EventIn(StrictModel): provider:str=Field(max_length=80);model:str=Field(max_length=160);application:str=Field(max_length=120);input_tokens:int=Field(0,ge=0);output_tokens:int=Field(0,ge=0);duration_ms:float=Field(0,ge=0);estimated_cost:float=Field(0,ge=0);metadata:dict=Field(default_factory=dict)
+
+class ImportStartIn(StrictModel):
+    filename:str=Field(min_length=1,max_length=255)
+    file_size:int=Field(gt=0,le=500_000_000)
+    format:str=Field(pattern=r"^(csv|json|jsonl)$")
+
+class ImportCommitIn(StrictModel):
+    mapping:dict[str,str]=Field(min_length=1,max_length=100)
