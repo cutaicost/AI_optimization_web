@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+const source=readFileSync(new URL('../../apps/web/src/main.js',import.meta.url),'utf8');const api=readFileSync(new URL('../../apps/web/src/api.js',import.meta.url),'utf8');const css=readFileSync(new URL('../../apps/web/src/styles.css',import.meta.url),'utf8');
+test('public authenticated and administrative routes exist',()=>['/login','/register','/app/overview','/app/profile','/admin','/admin/users','/admin/audit','/admin/system'].forEach(route=>assert.ok(source.includes(route))));
+test('browser auth does not use localStorage',()=>{assert.doesNotMatch(source+api,/localStorage|Authorization.*Bearer/);assert.match(api,/X-CSRF-Token/);assert.match(api,/credentials:'same-origin'/)});
+test('readability targets are encoded in the shared design system',()=>{assert.match(css,/body\{[^}]*font-size:16px/);assert.match(css,/page-head h1\{font-size:34px/);assert.match(css,/th,td\{font-size:15px/);assert.match(css,/button\{font:inherit;font-size:16px/)});

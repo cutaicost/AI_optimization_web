@@ -1,0 +1,102 @@
+from datetime import datetime, timezone
+from uuid import uuid4
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from .database import Base
+
+def now(): return datetime.now(timezone.utc)
+def identifier(): return str(uuid4())
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
+    username: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(100))
+    password_hash: Mapped[str] = mapped_column(String(512))
+    role: Mapped[str] = mapped_column(String(20), default="USER", index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    organization: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    job_title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    preferences: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+class Session(Base):
+    __tablename__ = "sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    csrf_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    user: Mapped[User] = relationship()
+
+class TelemetryEvent(Base):
+    __tablename__ = "telemetry_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    organization_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    provider: Mapped[str] = mapped_column(String(80), index=True)
+    model: Mapped[str] = mapped_column(String(160), index=True)
+    application: Mapped[str] = mapped_column(String(120), index=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    duration_ms: Mapped[float] = mapped_column(Float, default=0)
+    estimated_cost: Mapped[float] = mapped_column(Float, default=0)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    __table_args__ = (Index("ix_telemetry_owner_time", "user_id", "timestamp"),)
+
+class ImportJob(Base):
+    __tablename__ = "import_jobs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    rows_total: Mapped[int] = mapped_column(Integer, default=0)
+    rows_imported: Mapped[int] = mapped_column(Integer, default=0)
+    rows_rejected: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class Budget(Base):
+    __tablename__ = "budgets"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    monthly_amount: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    actor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(100), index=True)
+    outcome: Mapped[str] = mapped_column(String(20), default="success")
+    resource_type: Mapped[str] = mapped_column(String(60))
+    resource_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
+    identity_hash: Mapped[str] = mapped_column(String(64), index=True)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    successful: Mapped[bool] = mapped_column(Boolean, default=False)
+
+# Reserved durable entities for incremental feature migration.
+class ForecastRun(Base):
+    __tablename__="forecast_runs"; id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);result:Mapped[dict]=mapped_column(JSON,default=dict)
+class Integration(Base):
+    __tablename__="integrations";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);name:Mapped[str]=mapped_column(String(120));kind:Mapped[str]=mapped_column(String(60));configuration:Mapped[dict]=mapped_column(JSON,default=dict)
+class CloudProviderConfig(Base):
+    __tablename__="cloud_provider_configs";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);provider:Mapped[str]=mapped_column(String(80));credential_reference:Mapped[str|None]=mapped_column(String(120),nullable=True);__table_args__=(UniqueConstraint("user_id","provider",name="uq_provider_owner"),)
+class PriceOverride(Base):
+    __tablename__="price_overrides";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);provider:Mapped[str]=mapped_column(String(80));model:Mapped[str]=mapped_column(String(160));input_price:Mapped[float]=mapped_column(Float);output_price:Mapped[float]=mapped_column(Float);__table_args__=(UniqueConstraint("user_id","provider","model",name="uq_price_owner_model"),)
+class ModelEvaluation(Base):
+    __tablename__="model_evaluations";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);model:Mapped[str]=mapped_column(String(160));metric:Mapped[str]=mapped_column(String(100));score:Mapped[float]=mapped_column(Float);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
