@@ -15,6 +15,7 @@ const routes = {
   app: new Set(['/app', '/app/overview', '/app/usage', '/app/costs', '/app/models', '/app/forecasts', '/app/optimization', '/app/anomalies', '/app/budgets', '/app/import', '/app/scenario-lab', '/app/reports', '/app/integrations', '/app/profile']),
   admin: new Set(['/admin', '/admin/users', '/admin/audit', '/admin/system']),
 };
+const authenticatedHome = (user) => (user.must_change_password ? '/app/profile' : user.role === 'ADMIN' ? '/admin' : '/app/overview');
 function navigate(path) {
   history.pushState({}, '', path);
   render();
@@ -170,7 +171,7 @@ async function render() {
     currentUser = null;
   }
   if (routes.public.has(path)) {
-    if (currentUser && path !== '/') return navigate('/app/overview');
+    if (currentUser && path !== '/') return navigate(authenticatedHome(currentUser));
     app.innerHTML = path === '/' ? await landing() : authPage(path.slice(1));
     return wire();
   }
@@ -269,7 +270,7 @@ async function authSubmit(event) {
         body: JSON.stringify(data),
       });
       currentUser = result.user;
-      navigate(result.user.must_change_password ? '/app/profile' : '/app/overview');
+      navigate(result.redirect_to || authenticatedHome(result.user));
     }
   } catch (error) {
     status.textContent = error.message;

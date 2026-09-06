@@ -6,7 +6,7 @@ import json,secrets
 import os,threading,time
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import case, delete, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -108,7 +108,7 @@ def login(payload:LoginIn,response:Response,db:Session=Depends(db_session)):
         audit(db,"authentication.login",outcome="disabled",actor=user.id);db.commit();raise HTTPException(403,"This account is disabled")
     db.execute(delete(UserSession).where(UserSession.user_id==user.id,UserSession.revoked_at.is_(None)))
     raw,csrf=create_session(db,user);user.last_login_at=utcnow();audit(db,"authentication.login",actor=user.id);db.commit();set_session_cookies(response,raw,csrf)
-    return {"user":public_user(user)}
+    return {"user":public_user(user),"redirect_to":"/app/profile" if user.must_change_password else "/admin" if user.role=="ADMIN" else "/app/overview"}
 
 @app.post("/api/v1/auth/logout",dependencies=[Depends(require_csrf)])
 def logout(request:Request,response:Response,db:Session=Depends(db_session)):
@@ -221,6 +221,17 @@ def export_system(_:User=Depends(require_admin),db:Session=Depends(db_session)):
 # The production image copies Vite's output here. This catch-all is deliberately
 # registered after every API route so API handlers always take precedence.
 DIST_ROOT=Path(__file__).resolve().parents[3]/"dist"
+@app.get("/admin",include_in_schema=False)
+@app.get("/admin/{admin_path:path}",include_in_schema=False)
+def frontend_admin(request:Request,admin_path:str="",db:Session=Depends(db_session)):
+    session=current_session(request,db)
+    if not session:return RedirectResponse("/login",status_code=303)
+    if session.user.must_change_password:return RedirectResponse("/app/profile",status_code=303)
+    if session.user.role!="ADMIN":return JSONResponse({"detail":"Administrator access required"},status_code=403)
+    index=DIST_ROOT/"index.html"
+    if index.is_file():return FileResponse(index)
+    return JSONResponse({"detail":"Frontend build is unavailable"},status_code=404)
+
 @app.api_route("/{full_path:path}",methods=["GET","HEAD"],include_in_schema=False)
 def frontend(full_path:str):
     if full_path=="api" or full_path.startswith("api/"):

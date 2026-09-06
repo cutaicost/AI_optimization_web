@@ -41,7 +41,7 @@ def test_registration_rejects_duplicates_malformed_and_password_mismatch(client)
     assert register(client,"Sith","reserved@example.com").status_code==409
 
 def test_login_session_me_logout_and_csrf(client):
-    register(client);result=login(client);assert result.status_code==200;assert client.cookies.get(SESSION_COOKIE);assert client.cookies.get(CSRF_COOKIE)
+    register(client);result=login(client);assert result.status_code==200;assert result.json()["redirect_to"]=="/app/overview";assert client.cookies.get(SESSION_COOKIE);assert client.cookies.get(CSRF_COOKIE)
     cookie_headers=result.headers.get_list("set-cookie");assert any("HttpOnly" in value and "SameSite=lax" in value for value in cookie_headers if value.startswith(f"{SESSION_COOKIE}="))
     assert client.get("/api/v1/auth/me").status_code==200
     assert client.post("/api/v1/auth/logout").status_code==403
@@ -84,7 +84,7 @@ def test_rbac_admin_users_and_final_admin_protection(client):
     client.cookies.clear();assert login(client,"Sith",os.environ["ADMIN_SITH_PASSWORD"]).status_code==200
     assert client.get("/api/v1/admin/users").status_code==428
     assert client.post("/api/v1/auth/change-password",headers=csrf(client),json={"current_password":os.environ["ADMIN_SITH_PASSWORD"],"new_password":"ChangedAdminPassword456"}).status_code==200
-    assert login(client,"Sith","ChangedAdminPassword456").status_code==200
+    admin_login=login(client,"Sith","ChangedAdminPassword456");assert admin_login.status_code==200;assert admin_login.json()["redirect_to"]=="/admin"
     users=client.get("/api/v1/admin/users").json()["items"];ordinary=next(user for user in users if user["username"]=="ordinary")
     detail=client.get(f"/api/v1/admin/users/{ordinary['id']}");assert detail.status_code==200;assert "password_hash" not in detail.text
     system=client.get("/api/v1/admin/system");assert system.status_code==200;assert "session_secret" not in system.text.lower()
@@ -92,6 +92,13 @@ def test_rbac_admin_users_and_final_admin_protection(client):
     with SessionLocal() as db:
         beyond=db.scalar(select(User).where(User.username=="Beyond"));beyond.is_active=False;db.commit();sith=db.scalar(select(User).where(User.username=="Sith"));sith_id=sith.id
     assert client.patch(f"/api/v1/admin/users/{sith_id}",headers=csrf(client),json={"role":"VIEWER"}).status_code==409
+
+def test_admin_page_requires_admin_session(client):
+    logged_out=client.get("/admin",follow_redirects=False);assert logged_out.status_code==303;assert logged_out.headers["location"]=="/login"
+    register(client);login(client);assert client.get("/admin",follow_redirects=False).status_code==403
+    with SessionLocal() as db:user=db.scalar(select(User).where(User.username=="ordinary"));user.role="ADMIN";db.commit()
+    assert client.get("/admin",follow_redirects=False).status_code in {200,404}
+    assert client.get("/api/v1/admin/system").status_code==200
 
 def test_user_data_isolation_and_owner_scoped_reset(client):
     register(client,"first","first@example.com");login(client,"first");assert client.post("/api/v1/telemetry",headers=csrf(client),json={"provider":"p","model":"m","application":"a","input_tokens":10}).status_code==201
