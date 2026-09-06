@@ -40,3 +40,10 @@ class ImportStartIn(StrictModel):
 
 class ImportCommitIn(StrictModel):
     mapping:dict[str,str]=Field(min_length=1,max_length=100)
+
+class BudgetIn(StrictModel):
+    name:str=Field(min_length=1,max_length=120);monthly_amount:float=Field(gt=0,le=1_000_000_000);period:str=Field("monthly",pattern=r"^(monthly|quarterly|annual)$");warning_threshold:float=Field(80,ge=1,le=100);is_active:bool=True
+class ScenarioIn(StrictModel):
+    name:str=Field(min_length=1,max_length=120);monthly_requests:int=Field(ge=0,le=1_000_000_000);input_tokens_per_request:int=Field(ge=0,le=10_000_000);output_tokens_per_request:int=Field(ge=0,le=10_000_000);input_price_per_million:float=Field(ge=0,le=1_000_000);output_price_per_million:float=Field(ge=0,le=1_000_000)
+class IntegrationIn(StrictModel):
+    name:str=Field(min_length=1,max_length=120);kind:str=Field(min_length=1,max_length=60,pattern=r"^[a-z0-9_.-]+$");endpoint:str|None=Field(None,max_length=500);secret_env_name:str|None=Field(None,max_length=200,pattern=r"^[A-Z][A-Z0-9_]*$")

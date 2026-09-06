@@ -78,6 +78,9 @@ class ImportJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    executor_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __table_args__ = (Index("ix_import_owner_status", "user_id", "status"),Index("ix_import_owner_created", "user_id", "created_at"),)
 
 class Budget(Base):
@@ -86,6 +89,9 @@ class Budget(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(120))
     monthly_amount: Mapped[float] = mapped_column(Float)
+    period: Mapped[str] = mapped_column(String(20), default="monthly")
+    warning_threshold: Mapped[float] = mapped_column(Float, default=80.0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 class AuditEvent(Base):
@@ -116,9 +122,11 @@ class RateLimitEvent(Base):
 
 # Reserved durable entities for incremental feature migration.
 class ForecastRun(Base):
-    __tablename__="forecast_runs"; id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);result:Mapped[dict]=mapped_column(JSON,default=dict)
+    __tablename__="forecast_runs"; id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);organization_id:Mapped[str|None]=mapped_column(String(36),nullable=True,index=True);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);parameters:Mapped[dict]=mapped_column(JSON,default=dict);result:Mapped[dict]=mapped_column(JSON,default=dict);source_start:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True);source_end:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True)
 class Integration(Base):
-    __tablename__="integrations";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);name:Mapped[str]=mapped_column(String(120));kind:Mapped[str]=mapped_column(String(60));configuration:Mapped[dict]=mapped_column(JSON,default=dict)
+    __tablename__="integrations";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);name:Mapped[str]=mapped_column(String(120));kind:Mapped[str]=mapped_column(String(60));configuration:Mapped[dict]=mapped_column(JSON,default=dict);secret_reference:Mapped[str|None]=mapped_column(String(200),nullable=True);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+class ScenarioRun(Base):
+    __tablename__="scenario_runs";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);organization_id:Mapped[str|None]=mapped_column(String(36),nullable=True,index=True);parameters:Mapped[dict]=mapped_column(JSON,default=dict);result:Mapped[dict]=mapped_column(JSON,default=dict);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
 class CloudProviderConfig(Base):
     __tablename__="cloud_provider_configs";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);provider:Mapped[str]=mapped_column(String(80));credential_reference:Mapped[str|None]=mapped_column(String(120),nullable=True);__table_args__=(UniqueConstraint("user_id","provider",name="uq_provider_owner"),)
 class PriceOverride(Base):

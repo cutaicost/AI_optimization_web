@@ -39,3 +39,5 @@ npm audit
 Architecture, security, migration decisions, and operations are documented in [`docs/`](docs/).
 
 The telemetry schema, import state machine, limits, ownership rules, and next migration stage are documented in [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
+
+The durable worker and advanced analytics behavior are documented in [`docs/ADVANCED_PRODUCT.md`](docs/ADVANCED_PRODUCT.md).

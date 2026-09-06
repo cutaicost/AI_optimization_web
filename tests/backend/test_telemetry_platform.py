@@ -1,4 +1,4 @@
-import pytest
+import pytest,time
 from fastapi.testclient import TestClient
 from sqlalchemy import func,select
 from apps.api.aiopt_web.auth import CSRF_COOKIE
@@ -25,11 +25,16 @@ def start(client,content=CSV,filename="telemetry.csv",fmt="csv"):
 def upload_analyze(client,import_id,content=CSV,filename="telemetry.csv"):
     assert client.post(f"/api/v1/import/{import_id}/upload",headers=csrf(client),files={"file":(filename,content)}).status_code==200
     result=client.post(f"/api/v1/import/{import_id}/analyze",headers=csrf(client));assert result.status_code==200;return result.json()
+def wait_status(client,import_id,expected):
+    for _ in range(200):
+        job=client.get(f"/api/v1/import/{import_id}/status").json()["import"]
+        if job["status"] in {"COMPLETED","FAILED","CANCELLED"}:break
+        time.sleep(.02)
+    assert job["status"]==expected;return job
 
 def test_csv_import_mapping_commit_history_analytics_and_audit(client):
     signup(client,"first");import_id=start(client);analyzed=upload_analyze(client,import_id);assert analyzed["suggested_mapping"]["vendor"]=="provider"
-    result=client.post(f"/api/v1/import/{import_id}/commit",headers=csrf(client),json={"mapping":analyzed["suggested_mapping"]});assert result.status_code==200;assert result.json()["import"]["inserted_rows"]==2
-    assert client.get(f"/api/v1/import/{import_id}/status").json()["import"]["status"]=="COMPLETED"
+    result=client.post(f"/api/v1/import/{import_id}/commit",headers=csrf(client),json={"mapping":analyzed["suggested_mapping"]});assert result.status_code==202;assert wait_status(client,import_id,"COMPLETED")["inserted_rows"]==2
     assert client.get("/api/v1/import/history").json()["items"][0]["inserted_rows"]==2
     usage=client.get("/api/v1/usage").json();assert usage["requests"]==2;assert usage["total_tokens"]==225
     costs=client.get("/api/v1/costs").json();assert costs["total_spend"]==pytest.approx(.0325)
@@ -49,14 +54,14 @@ def test_import_and_analytics_are_strictly_owner_scoped(client):
 
 def test_false_completed_prevention_and_rejected_rows(client):
     signup(client,"first");bad=b"application,provider,model,input_tokens\napp,p,m,not-a-number\n";import_id=start(client,bad);analyzed=upload_analyze(client,import_id,bad)
-    response=client.post(f"/api/v1/import/{import_id}/commit",headers=csrf(client),json={"mapping":analyzed["suggested_mapping"]});assert response.status_code==400
-    status=client.get(f"/api/v1/import/{import_id}/status").json()["import"];assert status["status"]=="FAILED";assert status["inserted_rows"]==0
+    response=client.post(f"/api/v1/import/{import_id}/commit",headers=csrf(client),json={"mapping":analyzed["suggested_mapping"]});assert response.status_code==202
+    status=wait_status(client,import_id,"FAILED");assert status["inserted_rows"]==0
     rejected=client.get(f"/api/v1/import/{import_id}/rejected").json();assert rejected["count"]==1
     with SessionLocal() as db:assert db.scalar(select(func.count()).select_from(TelemetryEvent))==0
 
 def test_cancel_and_owner_scoped_reset(client):
     signup(client,"first");import_id=start(client);assert client.post(f"/api/v1/import/{import_id}/cancel",headers=csrf(client)).status_code==200
-    second=start(client);analyzed=upload_analyze(client,second);client.post(f"/api/v1/import/{second}/commit",headers=csrf(client),json={"mapping":analyzed["suggested_mapping"]})
+    second=start(client);analyzed=upload_analyze(client,second);client.post(f"/api/v1/import/{second}/commit",headers=csrf(client),json={"mapping":analyzed["suggested_mapping"]});wait_status(client,second,"COMPLETED")
     response=client.delete("/api/v1/telemetry",headers=csrf(client));assert response.json()=={"deleted":2,"imports_deleted":2}
     assert client.get("/api/v1/import/history").json()["items"]==[]
 

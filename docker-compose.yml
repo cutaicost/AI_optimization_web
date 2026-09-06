@@ -18,6 +18,14 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
     depends_on: {postgres: {condition: service_healthy}}
+  worker:
+    build: {context: ., dockerfile: Dockerfile.api}
+    command: ["python", "-m", "apps.api.aiopt_web.worker"]
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+psycopg://aioptimization:${POSTGRES_PASSWORD}@postgres/aioptimization
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
+    depends_on: {postgres: {condition: service_healthy}}
   web:
     build: {context: ., dockerfile: Dockerfile.web}
     ports: ["3000:80"]

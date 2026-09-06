@@ -8,7 +8,7 @@ from .database import db_session
 from .models import ImportJob,TelemetryEvent,User
 from .schemas import ImportCommitIn,ImportStartIn
 from .security import utcnow
-from .telemetry_import import MAX_ACTIVE_IMPORTS,MAX_FILE_SIZE,ImportFailure,auto_mapping,delimiter,encoding,map_row,rows,storage_path,validate_filename
+from .telemetry_import import MAX_ACTIVE_IMPORTS,MAX_FILE_SIZE,ImportFailure,auto_mapping,cancellation_path,delimiter,encoding,map_row,rows,storage_path,validate_filename
 
 router=APIRouter(prefix="/api/v1")
 
@@ -18,7 +18,7 @@ def owned_job(db,user,import_id):
     return job
 
 def job_json(job):
-    return {"id":job.id,"filename":job.filename,"file_size":job.file_size,"format":job.file_format,"status":job.status,"total_rows":job.rows_total,"processed_rows":job.rows_processed,"valid_rows":job.rows_valid,"rejected_rows":job.rows_rejected,"inserted_rows":job.rows_imported,"mapping":job.mapping,"sample_rows":job.sample_rows,"failure_reason":job.failure_reason,"created_at":job.created_at,"updated_at":job.updated_at,"completed_at":job.completed_at}
+    return {"id":job.id,"filename":job.filename,"file_size":job.file_size,"format":job.file_format,"status":job.status,"total_rows":job.rows_total,"processed_rows":job.rows_processed,"valid_rows":job.rows_valid,"rejected_rows":job.rows_rejected,"inserted_rows":job.rows_imported,"percent":round(job.rows_processed/max(job.rows_total,1)*100,1),"mapping":job.mapping,"sample_rows":job.sample_rows,"failure_reason":job.failure_reason,"created_at":job.created_at,"started_at":job.started_at,"updated_at":job.updated_at,"completed_at":job.completed_at}
 
 def unlink(job):
     path=storage_path(job.storage_id)
@@ -79,33 +79,21 @@ def analyze_import(import_id:str,user:User=Depends(require_operational_user),db:
 @router.get("/import/{import_id}/status")
 def import_status(import_id:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):return {"import":job_json(owned_job(db,user,import_id))}
 
-@router.post("/import/{import_id}/commit",dependencies=[Depends(require_csrf)])
+@router.post("/import/{import_id}/commit",status_code=202,dependencies=[Depends(require_csrf)])
 def commit_import(import_id:str,payload:ImportCommitIn,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
     job=owned_job(db,user,import_id)
     if job.status!="READY":raise HTTPException(409,"Import is not ready to commit")
     if not {"application","provider","model"}.issubset(set(payload.mapping.values())):raise HTTPException(422,"Mapping must include application, provider, and model")
-    path=storage_path(job.storage_id);job.status="IMPORTING";job.mapping=payload.mapping;db.flush();inserted=0;rejected=0;examples=[]
-    try:
-        for number,row in enumerate(rows(path,job.file_format,job.detected_encoding or "utf-8",job.detected_delimiter or ","),1):
-            try:
-                data=map_row(row,payload.mapping);db.add(TelemetryEvent(user_id=user.id,organization_id=None,import_job_id=job.id,source="import",metadata_json={},**data));inserted+=1
-                if inserted%1000==0:db.flush()
-            except Exception as error:
-                rejected+=1
-                if len(examples)<100:examples.append({"row_number":number,"error":str(error)[:300]})
-        db.flush()
-        if inserted<1:raise ImportFailure("No valid telemetry rows were available to import")
-        job.rows_processed=inserted+rejected;job.rows_valid=inserted;job.rows_imported=inserted;job.rows_rejected=rejected;job.rejected_rows_json=examples;job.status="COMPLETED";job.completed_at=utcnow();audit(db,"import.completed",actor=user.id,resource_type="import",resource_id=job.id,inserted=inserted,rejected=rejected);db.commit();unlink(job)
-        return {"import":job_json(job)}
-    except Exception:
-        db.rollback();job=owned_job(db,user,import_id);job.status="FAILED";job.failure_reason="Telemetry persistence failed; no rows were committed";job.rows_imported=0;job.rows_rejected=rejected;job.rejected_rows_json=examples;job.completed_at=utcnow();audit(db,"import.failed",outcome="failure",actor=user.id,resource_type="import",resource_id=job.id,rejected=rejected);db.commit();unlink(job)
-        raise HTTPException(400,job.failure_reason)
+    job.status="QUEUED";job.mapping=payload.mapping;job.failure_reason=None;audit(db,"import.queued",actor=user.id,resource_type="import",resource_id=job.id);db.commit();return {"import":job_json(job)}
 
 @router.post("/import/{import_id}/cancel",dependencies=[Depends(require_csrf)])
 def cancel_import(import_id:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
     job=owned_job(db,user,import_id)
     if job.status in {"COMPLETED","FAILED","CANCELLED"}:raise HTTPException(409,"Import can no longer be cancelled")
-    job.status="CANCELLED";job.completed_at=utcnow();audit(db,"import.cancelled",actor=user.id,resource_type="import",resource_id=job.id);db.commit();unlink(job);return {"import":job_json(job)}
+    if job.status in {"PREPARING","IMPORTING"}:
+        cancellation_path(job.storage_id).touch(exist_ok=True);job.status="CANCELLING";payload=job_json(job);db.rollback();return {"import":payload}
+    else:job.status="CANCELLED";job.completed_at=utcnow();unlink(job);audit(db,"import.cancelled",actor=user.id,resource_type="import",resource_id=job.id)
+    db.commit();return {"import":job_json(job)}
 
 @router.get("/import/{import_id}/rejected")
 def rejected_rows(import_id:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):

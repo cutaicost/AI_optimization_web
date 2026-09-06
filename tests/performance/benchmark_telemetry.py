@@ -3,12 +3,13 @@ import os,time,tracemalloc,tempfile,sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2];sys.path.insert(0,str(ROOT))
 DB=Path(tempfile.gettempdir())/"aiopt-benchmark.sqlite"
-os.environ.update(APP_ENV="test",DATABASE_URL=f"sqlite:///{DB.as_posix()}")
+os.environ.update(APP_ENV="benchmark",DATABASE_URL=f"sqlite:///{DB.as_posix()}")
 os.environ["".join(("SESSION","_SECRET"))]="".join(("local","benchmark","session","material"))
 from fastapi.testclient import TestClient
 from apps.api.aiopt_web.auth import CSRF_COOKIE
 from apps.api.aiopt_web.database import Base,engine
 from apps.api.aiopt_web.main import app
+from apps.api.aiopt_web.worker import process_next
 
 PASSWORD="SyntheticBenchmark123"
 HEADER="timestamp,application,provider,model,input_tokens,output_tokens,cost,latency_ms,padding\n"
@@ -29,7 +30,8 @@ def main():
             path=fixture(count);size=path.stat().st_size;tracemalloc.start();started=time.perf_counter()
             job=client.post("/api/v1/import/start",headers=headers,json={"filename":"synthetic.csv","file_size":size,"format":"csv"}).json()["import"]["id"]
             with path.open("rb") as source:client.post(f"/api/v1/import/{job}/upload",headers=headers,files={"file":("synthetic.csv",source,"text/csv")}).raise_for_status()
-            analyzed=client.post(f"/api/v1/import/{job}/analyze",headers=headers).json();result=client.post(f"/api/v1/import/{job}/commit",headers=headers,json={"mapping":analyzed["suggested_mapping"]});result.raise_for_status();_,peak=tracemalloc.get_traced_memory();tracemalloc.stop();path.unlink(missing_ok=True)
-            print(f"rows={count} size_mb={size/1_000_000:.2f} import_s={time.perf_counter()-started:.2f} peak_python_mb={peak/1_000_000:.1f}",{p:timed(client,p) for p in ("/api/v1/overview","/api/v1/usage","/api/v1/costs","/api/v1/models")})
+            analyzed=client.post(f"/api/v1/import/{job}/analyze",headers=headers).json();queued=time.perf_counter();result=client.post(f"/api/v1/import/{job}/commit",headers=headers,json={"mapping":analyzed["suggested_mapping"]});result.raise_for_status();enqueue_ms=(time.perf_counter()-queued)*1000;worker_started=time.perf_counter();process_next("benchmark-worker");worker_seconds=time.perf_counter()-worker_started;_,peak=tracemalloc.get_traced_memory();tracemalloc.stop();path.unlink(missing_ok=True)
+            print(f"rows={count} size_mb={size/1_000_000:.2f} enqueue_ms={enqueue_ms:.2f} worker_s={worker_seconds:.2f} total_s={time.perf_counter()-started:.2f} peak_python_mb={peak/1_000_000:.1f}",{p:timed(client,p) for p in ("/api/v1/overview","/api/v1/usage","/api/v1/costs","/api/v1/models","/api/v1/optimization","/api/v1/anomalies","/api/v1/budgets")})
+            forecast_started=time.perf_counter();forecast=client.post("/api/v1/forecasts?metric=spend&horizon=30",headers=headers);print("forecast_ms",round((time.perf_counter()-forecast_started)*1000,2),"status",forecast.status_code)
     engine.dispose();DB.unlink(missing_ok=True)
 if __name__=="__main__":main()

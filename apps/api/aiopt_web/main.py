@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from time import monotonic
 import secrets
+import os,threading,time
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -15,6 +16,7 @@ from .models import AuditEvent,ImportJob,LoginAttempt,Session as UserSession,Tel
 from .schemas import AdminUserUpdateIn,EventIn,LoginIn,PasswordChangeIn,ProfileIn,RegisterIn
 from .security import hash_password,utcnow,verify_password
 from .product import router as product_router
+from .advanced import router as advanced_router
 from .telemetry_import import cleanup_stale_files,storage_path
 
 STARTED=monotonic();cfg=settings()
@@ -29,10 +31,21 @@ async def lifespan(_):
         stale=db.scalars(select(ImportJob).where(ImportJob.status.in_(["CREATED","UPLOADED","ANALYZING","READY","IMPORTING"]),ImportJob.updated_at<cutoff)).all()
         for job in stale:job.status="FAILED";job.failure_reason="Import expired after 24 hours";job.completed_at=utcnow()
         if stale:db.commit()
+    stop=threading.Event();thread=None
+    if cfg.environment=="test" or os.getenv("EMBEDDED_IMPORT_WORKER")=="true":
+        from .worker import process_next,recover_stale_jobs
+        recover_stale_jobs()
+        def work():
+            while not stop.is_set():
+                if process_next("embedded-worker") is None:stop.wait(.05)
+        thread=threading.Thread(target=work,daemon=True);thread.start()
     yield
+    stop.set()
+    if thread:thread.join(timeout=2)
 
 app=FastAPI(title="AI Optimization Tool Web API",version=VERSION,lifespan=lifespan)
 app.include_router(product_router)
+app.include_router(advanced_router)
 app.add_middleware(CORSMiddleware,allow_origins=list(cfg.allowed_origins),allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE"],allow_headers=["Content-Type","X-CSRF-Token"])
 
 @app.middleware("http")
@@ -177,4 +190,6 @@ def admin_system(_:User=Depends(require_admin),db:Session=Depends(db_session)):
     db.execute(text("SELECT 1"))
     try:migration=db.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none() or "unversioned"
     except Exception:migration="unversioned"
-    return {"application_version":VERSION,"api_version":"v1","database":"connected","uptime_seconds":round(monotonic()-STARTED,2),"user_count":db.scalar(select(func.count()).select_from(User)) or 0,"telemetry_rows":db.scalar(select(func.count()).select_from(TelemetryEvent)) or 0,"imports":{"total":db.scalar(select(func.count()).select_from(ImportJob)) or 0,"active":db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status.in_(["CREATED","UPLOADED","ANALYZING","READY","IMPORTING"]))) or 0,"failed":db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="FAILED")) or 0},"migration":migration,"environment":cfg.environment}
+    queued=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="QUEUED")) or 0;running=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status.in_(["PREPARING","IMPORTING","CANCELLING"]))) or 0;oldest=db.scalar(select(func.min(ImportJob.updated_at)).where(ImportJob.status.in_(["QUEUED","PREPARING","IMPORTING","CANCELLING"])))
+    from .models import ForecastRun
+    return {"application_version":VERSION,"api_version":"v1","database":"connected","uptime_seconds":round(monotonic()-STARTED,2),"user_count":db.scalar(select(func.count()).select_from(User)) or 0,"telemetry_rows":db.scalar(select(func.count()).select_from(TelemetryEvent)) or 0,"forecast_runs":db.scalar(select(func.count()).select_from(ForecastRun)) or 0,"worker":{"status":"working" if running else "idle-or-offline","queued":queued,"running":running,"oldest_job_at":oldest},"imports":{"total":db.scalar(select(func.count()).select_from(ImportJob)) or 0,"active":queued+running,"failed":db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="FAILED")) or 0},"migration":migration,"environment":cfg.environment}

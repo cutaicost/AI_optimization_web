@@ -36,6 +36,7 @@ def storage_root():
     return root
 
 def storage_path(storage_id):return storage_root()/f"{storage_id}.upload"
+def cancellation_path(storage_id):return storage_root()/f"{storage_id}.cancel"
 
 def cleanup_stale_files(max_age_seconds=86_400):
     cutoff=time.time()-max_age_seconds;removed=0
