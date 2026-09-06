@@ -40,7 +40,7 @@ def test_worker_claim_is_atomic_and_stale_jobs_requeue():
     with SessionLocal() as db:
         user=User(username='workeruser',email='w@example.com',display_name='W',password_hash='x');db.add(user);db.flush();job=ImportJob(user_id=user.id,filename='x.csv',file_size=1,file_format='csv',storage_id='storage',status='QUEUED');db.add(job);db.commit();job_id=job.id
     assert claim_next('one')==job_id;assert claim_next('two') is None
-    with SessionLocal() as db:job=db.get(ImportJob,job_id);job.claimed_at=datetime.now(timezone.utc)-timedelta(hours=1);db.commit()
+    with SessionLocal() as db:job=db.get(ImportJob,job_id);job.claimed_at=datetime.now(timezone.utc)-timedelta(hours=1);job.lease_expires_at=datetime.now(timezone.utc)-timedelta(minutes=1);db.commit()
     assert recover_stale_jobs(15)==1
     with SessionLocal() as db:assert db.get(ImportJob,job_id).status=='QUEUED'
 def test_worker_cancellation_checkpoint_rolls_back_all_rows():

@@ -81,6 +81,7 @@ class ImportJob(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     executor_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     __table_args__ = (Index("ix_import_owner_status", "user_id", "status"),Index("ix_import_owner_created", "user_id", "created_at"),)
 
 class Budget(Base):
@@ -119,6 +120,16 @@ class RateLimitEvent(Base):
     subject_hash: Mapped[str] = mapped_column(String(64), index=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
     __table_args__ = (Index("ix_rate_limit_action_subject_time", "action", "subject_hash", "occurred_at"),)
+
+class WorkerInstance(Base):
+    __tablename__="worker_instances"
+    worker_id:Mapped[str]=mapped_column(String(64),primary_key=True)
+    started_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+    last_heartbeat_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now,index=True)
+    hostname:Mapped[str]=mapped_column(String(120))
+    current_job_id:Mapped[str|None]=mapped_column(String(36),nullable=True,index=True)
+    status:Mapped[str]=mapped_column(String(20),default="STARTING",index=True)
+    version:Mapped[str]=mapped_column(String(30))
 
 # Reserved durable entities for incremental feature migration.
 class ForecastRun(Base):

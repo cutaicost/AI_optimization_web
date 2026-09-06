@@ -1,67 +1,100 @@
-"""Database-backed import worker. Run with: python -m apps.api.aiopt_web.worker."""
-import os,time
+"""Database-backed leased import worker. Run as a dedicated process."""
+import os,socket,threading,time
 from datetime import timedelta
-from sqlalchemy import delete,select,update
+from sqlalchemy import delete,insert,or_,select,update
+from sqlalchemy.exc import SQLAlchemyError
 from .auth import audit
-from .database import SessionLocal
-from .models import ImportJob,TelemetryEvent
+from .config import VERSION
+from .database import SessionLocal,engine
+from .models import ImportJob,TelemetryEvent,WorkerInstance
 from .security import utcnow
-from .telemetry_import import ImportFailure,cancellation_path,map_row,rows,storage_path
+from .import_storage import get_import_storage
+from .telemetry_import import ImportFailure,map_row,rows
 
-ACTIVE=("PREPARING","IMPORTING")
-def recover_stale_jobs(max_age_minutes=15):
+ACTIVE=("PREPARING","IMPORTING","CANCELLING");LEASE_SECONDS=int(os.getenv("WORKER_LEASE_SECONDS","90"));HEARTBEAT_SECONDS=int(os.getenv("WORKER_HEARTBEAT_SECONDS","15"))
+def register_worker(worker_id,status="STARTING"):
     with SessionLocal() as db:
-        cutoff=utcnow()-timedelta(minutes=max_age_minutes)
-        jobs=db.scalars(select(ImportJob).where(ImportJob.status.in_(ACTIVE),ImportJob.claimed_at<cutoff)).all()
-        for job in jobs:job.status="QUEUED";job.executor_id=None;job.claimed_at=None;job.failure_reason="Recovered after interrupted worker"
-        db.commit();return len(jobs)
-
+        row=db.get(WorkerInstance,worker_id);now=utcnow()
+        if row:row.started_at=now;row.last_heartbeat_at=now;row.hostname=socket.gethostname()[:120];row.status=status;row.current_job_id=None;row.version=VERSION
+        else:db.add(WorkerInstance(worker_id=worker_id,started_at=now,last_heartbeat_at=now,hostname=socket.gethostname()[:120],status=status,version=VERSION))
+        db.commit()
+def heartbeat(worker_id,status="IDLE",job_id=None,renew_lease=True):
+    try:
+        with SessionLocal() as db:
+            now=utcnow();row=db.get(WorkerInstance,worker_id)
+            if not row:db.add(WorkerInstance(worker_id=worker_id,started_at=now,last_heartbeat_at=now,hostname=socket.gethostname()[:120],status=status,current_job_id=job_id,version=VERSION))
+            else:row.last_heartbeat_at=now;row.status=status;row.current_job_id=job_id;row.version=VERSION
+            if job_id and renew_lease:db.execute(update(ImportJob).where(ImportJob.id==job_id,ImportJob.executor_id==worker_id,ImportJob.status.in_(ACTIVE)).values(lease_expires_at=now+timedelta(seconds=LEASE_SECONDS)))
+            db.commit()
+    except SQLAlchemyError:pass
+def recover_stale_jobs(max_age_minutes=None):
+    with SessionLocal() as db:
+        now=utcnow();fallback=timedelta(minutes=max_age_minutes) if max_age_minutes is not None else timedelta(seconds=LEASE_SECONDS);jobs=db.scalars(select(ImportJob).where(ImportJob.status.in_(ACTIVE),or_(ImportJob.lease_expires_at<now,ImportJob.lease_expires_at.is_(None)&(ImportJob.claimed_at<now-fallback)))).all();requeued=cancelled=0
+        for job in jobs:
+            if job.status=="CANCELLING" or get_import_storage().cancellation_requested(job.storage_id):job.status="CANCELLED";job.completed_at=now;cancelled+=1;_cleanup(job)
+            else:job.status="QUEUED";job.failure_reason="Recovered after expired worker lease";requeued+=1
+            job.executor_id=None;job.claimed_at=None;job.lease_expires_at=None
+        db.execute(update(WorkerInstance).where(WorkerInstance.last_heartbeat_at<now-timedelta(seconds=LEASE_SECONDS)).values(status="OFFLINE",current_job_id=None));db.commit();return requeued+cancelled
 def claim_next(executor_id):
     with SessionLocal() as db:
-        candidate=db.scalar(select(ImportJob.id).where(ImportJob.status=="QUEUED").order_by(ImportJob.updated_at).limit(1))
-        if not candidate:return None
-        changed=db.execute(update(ImportJob).where(ImportJob.id==candidate,ImportJob.status=="QUEUED",ImportJob.executor_id.is_(None)).values(status="PREPARING",executor_id=executor_id,claimed_at=utcnow(),started_at=utcnow())).rowcount
-        db.commit();return candidate if changed==1 else None
-
-def cancellation_requested(job):return cancellation_path(job.storage_id).is_file()
-
+        query=select(ImportJob).where(ImportJob.status=="QUEUED",ImportJob.executor_id.is_(None)).order_by(ImportJob.updated_at).limit(1)
+        if engine.dialect.name=="postgresql":query=query.with_for_update(skip_locked=True)
+        job=db.scalar(query)
+        if not job:return None
+        now=utcnow()
+        if engine.dialect.name=="postgresql":job.status="PREPARING";job.executor_id=executor_id;job.claimed_at=now;job.started_at=now;job.lease_expires_at=now+timedelta(seconds=LEASE_SECONDS);changed=1
+        else:changed=db.execute(update(ImportJob).where(ImportJob.id==job.id,ImportJob.status=="QUEUED",ImportJob.executor_id.is_(None)).values(status="PREPARING",executor_id=executor_id,claimed_at=now,started_at=now,lease_expires_at=now+timedelta(seconds=LEASE_SECONDS))).rowcount
+        db.commit();return job.id if changed==1 else None
 def execute(job_id,executor_id):
-    inserted=rejected=0;examples=[]
-    with SessionLocal() as db:
-        job=db.get(ImportJob,job_id)
-        if not job or job.executor_id!=executor_id or job.status!="PREPARING":return False
-        path=storage_path(job.storage_id);job.status="IMPORTING";db.commit()
-        try:
-            db.execute(delete(TelemetryEvent).where(TelemetryEvent.import_job_id==job.id))
-            for number,row in enumerate(rows(path,job.file_format,job.detected_encoding or "utf-8",job.detected_delimiter or ","),1):
-                if number%250==0 and cancellation_requested(job):raise InterruptedError
-                try:
-                    data=map_row(row,job.mapping);db.add(TelemetryEvent(user_id=job.user_id,organization_id=None,import_job_id=job.id,source="import",metadata_json={},**data));inserted+=1
-                    if inserted%1000==0:db.flush()
-                except Exception as error:
-                    rejected+=1
-                    if len(examples)<100:examples.append({"row_number":number,"error":str(error)[:300]})
-            db.flush()
-            if inserted<1:raise ImportFailure("No valid telemetry rows were available to import")
-            job.rows_processed=inserted+rejected;job.rows_valid=inserted;job.rows_imported=inserted;job.rows_rejected=rejected;job.rejected_rows_json=examples;job.status="COMPLETED";job.completed_at=utcnow();audit(db,"import.completed",actor=job.user_id,resource_type="import",resource_id=job.id,inserted=inserted,rejected=rejected);db.commit();_cleanup(job);return True
-        except InterruptedError:
-            db.rollback();job=db.get(ImportJob,job_id);job.status="CANCELLED";job.completed_at=utcnow();job.executor_id=None;audit(db,"import.cancelled",actor=job.user_id,resource_type="import",resource_id=job.id);db.commit();_cleanup(job);return False
-        except Exception as error:
-            db.rollback();job=db.get(ImportJob,job_id);job.status="FAILED";job.failure_reason=str(error)[:500];job.rows_imported=0;job.rows_rejected=rejected;job.rejected_rows_json=examples;job.completed_at=utcnow();audit(db,"worker.import_failed",outcome="failure",actor=job.user_id,resource_type="import",resource_id=job.id);db.commit();_cleanup(job);return False
-
-def _cleanup(job):
+    inserted=rejected=0;examples=[];batch=[];stop=threading.Event();progress={"at":time.monotonic()};pulse=threading.Thread(target=lambda:_pulse(stop,executor_id,job_id,progress),daemon=True);pulse.start()
     try:
-        path=storage_path(job.storage_id)
-        if path.is_file() and not path.is_symlink():path.unlink()
+        with SessionLocal() as db:
+            job=db.get(ImportJob,job_id)
+            if not job or job.executor_id!=executor_id or job.status!="PREPARING":return False
+            storage=get_import_storage();job.status="IMPORTING";db.commit()
+            try:
+                with storage.materialize(job.storage_id) as path:
+                    db.execute(delete(TelemetryEvent).where(TelemetryEvent.import_job_id==job.id))
+                    for number,row in enumerate(rows(path,job.file_format,job.detected_encoding or "utf-8",job.detected_delimiter or ","),1):
+                        if number%250==0 and storage.cancellation_requested(job.storage_id):raise InterruptedError
+                        try:
+                            data=map_row(row,job.mapping);batch.append({"user_id":job.user_id,"organization_id":None,"import_job_id":job.id,"source":"import","metadata_json":{},**data});inserted+=1
+                            if len(batch)>=1000:db.execute(insert(TelemetryEvent),batch);batch.clear();progress["at"]=time.monotonic()
+                        except Exception as error:
+                            rejected+=1
+                            if len(examples)<100:examples.append({"row_number":number,"error":str(error)[:300]})
+                if batch:db.execute(insert(TelemetryEvent),batch);batch.clear()
+                db.flush()
+                if inserted<1:raise ImportFailure("No valid telemetry rows were available to import")
+                job.rows_processed=inserted+rejected;job.rows_valid=inserted;job.rows_imported=inserted;job.rows_rejected=rejected;job.rejected_rows_json=examples;job.status="COMPLETED";job.completed_at=utcnow();job.lease_expires_at=None;audit(db,"import.completed",actor=job.user_id,resource_type="import",resource_id=job.id,inserted=inserted,rejected=rejected);db.commit();_cleanup(job);return True
+            except InterruptedError:
+                db.rollback();job=db.get(ImportJob,job_id);job.status="CANCELLED";job.completed_at=utcnow();job.executor_id=None;job.lease_expires_at=None;audit(db,"import.cancelled",actor=job.user_id,resource_type="import",resource_id=job.id);db.commit();_cleanup(job);return False
+            except SQLAlchemyError:
+                db.rollback();raise
+            except Exception as error:
+                db.rollback();job=db.get(ImportJob,job_id);job.status="FAILED";job.failure_reason=str(error)[:500];job.rows_imported=0;job.rows_rejected=rejected;job.rejected_rows_json=examples;job.completed_at=utcnow();job.lease_expires_at=None;audit(db,"worker.import_failed",outcome="failure",actor=job.user_id,resource_type="import",resource_id=job.id);db.commit();_cleanup(job);return False
+    finally:stop.set();pulse.join(timeout=2);heartbeat(executor_id,"IDLE")
+def _pulse(stop,worker_id,job_id,progress):
+    heartbeat(worker_id,"BUSY",job_id)
+    while not stop.wait(HEARTBEAT_SECONDS):
+        recent=time.monotonic()-progress["at"]<max(HEARTBEAT_SECONDS*3,5);heartbeat(worker_id,"BUSY",job_id,recent)
+        if not recent and not worker_id.startswith("embedded"):os._exit(75)
+def _cleanup(job):
+    storage=get_import_storage()
+    try:storage.delete(job.storage_id);storage.clear_cancellation(job.storage_id)
     except OSError:pass
-    try:cancellation_path(job.storage_id).unlink(missing_ok=True)
-    except OSError:pass
-
 def process_next(executor_id=None):
     executor_id=executor_id or f"worker-{os.getpid()}";job_id=claim_next(executor_id);return execute(job_id,executor_id) if job_id else None
-
 def run_forever(poll_seconds=1):
-    recover_stale_jobs();executor=f"worker-{os.getpid()}"
-    while True:
-        if process_next(executor) is None:time.sleep(poll_seconds)
+    worker=f"worker-{os.getpid()}";last_recovery=0
+    try:
+        while True:
+            try:
+                if not last_recovery:register_worker(worker)
+                if time.monotonic()-last_recovery>=HEARTBEAT_SECONDS:recover_stale_jobs();last_recovery=time.monotonic()
+                result=process_next(worker)
+                if result is None:heartbeat(worker,"IDLE");time.sleep(poll_seconds)
+            except SQLAlchemyError:
+                last_recovery=0;time.sleep(poll_seconds)
+    finally:heartbeat(worker,"STOPPING")
 if __name__=="__main__":run_forever()

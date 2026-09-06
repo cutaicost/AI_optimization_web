@@ -8,7 +8,8 @@ from .database import db_session
 from .models import ImportJob,TelemetryEvent,User
 from .schemas import ImportCommitIn,ImportStartIn
 from .security import utcnow
-from .telemetry_import import MAX_ACTIVE_IMPORTS,MAX_FILE_SIZE,ImportFailure,auto_mapping,cancellation_path,delimiter,encoding,map_row,rows,storage_path,validate_filename
+from .import_storage import get_import_storage
+from .telemetry_import import MAX_ACTIVE_IMPORTS,MAX_FILE_SIZE,ImportFailure,auto_mapping,delimiter,encoding,map_row,rows,validate_filename
 
 router=APIRouter(prefix="/api/v1")
 
@@ -21,9 +22,7 @@ def job_json(job):
     return {"id":job.id,"filename":job.filename,"file_size":job.file_size,"format":job.file_format,"status":job.status,"total_rows":job.rows_total,"processed_rows":job.rows_processed,"valid_rows":job.rows_valid,"rejected_rows":job.rows_rejected,"inserted_rows":job.rows_imported,"percent":round(job.rows_processed/max(job.rows_total,1)*100,1),"mapping":job.mapping,"sample_rows":job.sample_rows,"failure_reason":job.failure_reason,"created_at":job.created_at,"started_at":job.started_at,"updated_at":job.updated_at,"completed_at":job.completed_at}
 
 def unlink(job):
-    path=storage_path(job.storage_id)
-    try:
-        if path.is_file() and not path.is_symlink():path.unlink()
+    try:get_import_storage().delete(job.storage_id)
     except OSError:pass
 
 @router.post("/import/start",status_code=201,dependencies=[Depends(require_csrf)])
@@ -40,16 +39,16 @@ def start_import(payload:ImportStartIn,user:User=Depends(require_operational_use
 async def upload_import(import_id:str,file:UploadFile=File(...),user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
     job=owned_job(db,user,import_id)
     if job.status!="CREATED":raise HTTPException(409,"This import has already been uploaded")
-    path=storage_path(job.storage_id);received=0
+    storage=get_import_storage();received=0
     try:
-        with path.open("xb") as handle:
+        with storage.open_writer(job.storage_id) as handle:
             while chunk:=await file.read(1_000_000):
                 received+=len(chunk)
                 if received>MAX_FILE_SIZE or received>job.file_size:raise ImportFailure("Upload exceeds its declared size or the 500 MB limit")
                 handle.write(chunk)
         if received!=job.file_size:raise ImportFailure("Upload is incomplete")
     except (ImportFailure,OSError) as error:
-        try:path.unlink(missing_ok=True)
+        try:storage.delete(job.storage_id)
         except OSError:pass
         raise HTTPException(400,str(error))
     finally:await file.close()
@@ -59,16 +58,17 @@ async def upload_import(import_id:str,file:UploadFile=File(...),user:User=Depend
 def analyze_import(import_id:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
     job=owned_job(db,user,import_id)
     if job.status not in {"UPLOADED","READY"}:raise HTTPException(409,"Import is not ready for analysis")
-    path=storage_path(job.storage_id)
-    if not path.is_file() or path.is_symlink():raise HTTPException(409,"Uploaded file is unavailable")
+    storage=get_import_storage()
+    if not storage.exists(job.storage_id):raise HTTPException(409,"Uploaded file is unavailable")
     job.status="ANALYZING";db.commit()
     try:
-        enc=encoding(path);sep=delimiter(path,enc) if job.file_format=="csv" else None
-        iterator=rows(path,job.file_format,enc,sep or ",");sample=[];headers=[];total=0
-        for row in iterator:
-            total+=1
-            if not headers:headers=list(row.keys())
-            if len(sample)<20:sample.append({str(k)[:120]:str(v)[:500] for k,v in row.items()})
+        with storage.materialize(job.storage_id) as path:
+            enc=encoding(path);sep=delimiter(path,enc) if job.file_format=="csv" else None
+            iterator=rows(path,job.file_format,enc,sep or ",");sample=[];headers=[];total=0
+            for row in iterator:
+                total+=1
+                if not headers:headers=list(row.keys())
+                if len(sample)<20:sample.append({str(k)[:120]:str(v)[:500] for k,v in row.items()})
         if total==0:raise ImportFailure("Import contains no data rows")
         job.detected_encoding=enc;job.detected_delimiter=sep;job.rows_total=total;job.sample_rows=sample;job.mapping=auto_mapping(headers);job.status="READY";db.commit()
         return {"import":job_json(job),"columns":headers,"suggested_mapping":job.mapping}
@@ -91,7 +91,7 @@ def cancel_import(import_id:str,user:User=Depends(require_operational_user),db:S
     job=owned_job(db,user,import_id)
     if job.status in {"COMPLETED","FAILED","CANCELLED"}:raise HTTPException(409,"Import can no longer be cancelled")
     if job.status in {"PREPARING","IMPORTING"}:
-        cancellation_path(job.storage_id).touch(exist_ok=True);job.status="CANCELLING";payload=job_json(job);db.rollback();return {"import":payload}
+        get_import_storage().request_cancellation(job.storage_id);job.status="CANCELLING";payload=job_json(job);db.rollback();return {"import":payload}
     else:job.status="CANCELLED";job.completed_at=utcnow();unlink(job);audit(db,"import.cancelled",actor=user.id,resource_type="import",resource_id=job.id)
     db.commit();return {"import":job_json(job)}
 

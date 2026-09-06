@@ -41,3 +41,5 @@ Architecture, security, migration decisions, and operations are documented in [`
 The telemetry schema, import state machine, limits, ownership rules, and next migration stage are documented in [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
 
 The durable worker and advanced analytics behavior are documented in [`docs/ADVANCED_PRODUCT.md`](docs/ADVANCED_PRODUCT.md).
+
+PostgreSQL/SQLite topology, worker heartbeats, job leases, recovery, and scaling are documented in [`docs/ENTERPRISE_RUNTIME.md`](docs/ENTERPRISE_RUNTIME.md).

@@ -10,24 +10,32 @@ services:
   api:
     build: {context: ., dockerfile: Dockerfile.api}
     environment:
-      APP_ENV: production
+      APP_ENV: development
       DATABASE_URL: postgresql+psycopg://aioptimization:${POSTGRES_PASSWORD}@postgres/aioptimization
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
       ADMIN_SITH_PASSWORD: ${ADMIN_SITH_PASSWORD:-}
       ADMIN_BEYOND_PASSWORD: ${ADMIN_BEYOND_PASSWORD:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      IMPORT_STORAGE_ROOT: /var/lib/aiopt/imports
+    volumes: [import-data:/var/lib/aiopt/imports]
     depends_on: {postgres: {condition: service_healthy}}
+    healthcheck: {test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"], interval: 10s, timeout: 5s, retries: 10, start_period: 15s}
   worker:
     build: {context: ., dockerfile: Dockerfile.api}
+    restart: unless-stopped
     command: ["python", "-m", "apps.api.aiopt_web.worker"]
     environment:
-      APP_ENV: production
+      APP_ENV: development
       DATABASE_URL: postgresql+psycopg://aioptimization:${POSTGRES_PASSWORD}@postgres/aioptimization
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
-    depends_on: {postgres: {condition: service_healthy}}
+      IMPORT_STORAGE_ROOT: /var/lib/aiopt/imports
+    volumes: [import-data:/var/lib/aiopt/imports]
+    depends_on: {api: {condition: service_healthy}}
+    healthcheck: {test: ["CMD-SHELL", "kill -0 1"], interval: 15s, timeout: 5s, retries: 3}
   web:
     build: {context: ., dockerfile: Dockerfile.web}
     ports: ["3000:80"]
-    depends_on: [api]
-volumes: {postgres-data: {}}
+    depends_on: {api: {condition: service_healthy}}
+    healthcheck: {test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null"], interval: 15s, timeout: 5s, retries: 5}
+volumes: {postgres-data: {}, import-data: {}}

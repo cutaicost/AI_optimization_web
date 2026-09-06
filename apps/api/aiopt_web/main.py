@@ -12,14 +12,16 @@ from sqlalchemy.orm import Session
 from .auth import CSRF_COOKIE,SESSION_COOKIE,audit,bootstrap_admins,create_session,current_session,enforce_rate_limit,login_limited,public_user,require_admin,require_csrf,require_operational_user,require_user
 from .config import VERSION,settings
 from .database import Base,SessionLocal,db_session,engine
-from .models import AuditEvent,ImportJob,LoginAttempt,Session as UserSession,TelemetryEvent,User
+from .models import AuditEvent,ImportJob,LoginAttempt,Session as UserSession,TelemetryEvent,User,WorkerInstance
 from .schemas import AdminUserUpdateIn,EventIn,LoginIn,PasswordChangeIn,ProfileIn,RegisterIn
 from .security import hash_password,utcnow,verify_password
 from .product import router as product_router
 from .advanced import router as advanced_router
-from .telemetry_import import cleanup_stale_files,storage_path
+from .import_storage import get_import_storage
+from .telemetry_import import cleanup_stale_files
 
 STARTED=monotonic();cfg=settings()
+def aware(value):return value.replace(tzinfo=timezone.utc) if value and value.tzinfo is None else value
 
 @asynccontextmanager
 async def lifespan(_):
@@ -139,9 +141,7 @@ def clear_telemetry(user:User=Depends(require_operational_user),db:Session=Depen
     count=db.execute(delete(TelemetryEvent).where(TelemetryEvent.user_id==user.id)).rowcount
     db.execute(delete(ImportJob).where(ImportJob.user_id==user.id));audit(db,"telemetry.cleared",actor=user.id,resource_type="telemetry",records=count,imports=len(jobs));db.commit()
     for job in jobs:
-        path=storage_path(job.storage_id)
-        try:
-            if path.is_file() and not path.is_symlink():path.unlink()
+        try:get_import_storage().delete(job.storage_id)
         except OSError:pass
     return {"deleted":count,"imports_deleted":len(jobs)}
 
@@ -192,4 +192,5 @@ def admin_system(_:User=Depends(require_admin),db:Session=Depends(db_session)):
     except Exception:migration="unversioned"
     queued=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="QUEUED")) or 0;running=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status.in_(["PREPARING","IMPORTING","CANCELLING"]))) or 0;oldest=db.scalar(select(func.min(ImportJob.updated_at)).where(ImportJob.status.in_(["QUEUED","PREPARING","IMPORTING","CANCELLING"])))
     from .models import ForecastRun
-    return {"application_version":VERSION,"api_version":"v1","database":"connected","uptime_seconds":round(monotonic()-STARTED,2),"user_count":db.scalar(select(func.count()).select_from(User)) or 0,"telemetry_rows":db.scalar(select(func.count()).select_from(TelemetryEvent)) or 0,"forecast_runs":db.scalar(select(func.count()).select_from(ForecastRun)) or 0,"worker":{"status":"working" if running else "idle-or-offline","queued":queued,"running":running,"oldest_job_at":oldest},"imports":{"total":db.scalar(select(func.count()).select_from(ImportJob)) or 0,"active":queued+running,"failed":db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="FAILED")) or 0},"migration":migration,"environment":cfg.environment}
+    cutoff=utcnow()-timedelta(seconds=90);workers=db.scalars(select(WorkerInstance).order_by(WorkerInstance.last_heartbeat_at.desc())).all();cancelling=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="CANCELLING")) or 0;oldest_age=max(0,int((utcnow()-aware(oldest)).total_seconds())) if oldest else None
+    return {"application_version":VERSION,"api_version":"v1","database":"connected","uptime_seconds":round(monotonic()-STARTED,2),"user_count":db.scalar(select(func.count()).select_from(User)) or 0,"telemetry_rows":db.scalar(select(func.count()).select_from(TelemetryEvent)) or 0,"forecast_runs":db.scalar(select(func.count()).select_from(ForecastRun)) or 0,"worker":{"status":"working" if running else "idle-or-offline","queued":queued,"running":running,"cancelling":cancelling,"active_workers":sum(aware(w.last_heartbeat_at)>=cutoff and w.status!="OFFLINE" for w in workers),"stale_workers":sum(aware(w.last_heartbeat_at)<cutoff or w.status=="OFFLINE" for w in workers),"oldest_job_at":oldest,"oldest_job_age_seconds":oldest_age,"instances":[{"worker_id":w.worker_id,"status":"OFFLINE" if aware(w.last_heartbeat_at)<cutoff else w.status,"current_job_id":w.current_job_id,"last_heartbeat_at":w.last_heartbeat_at,"hostname":w.hostname,"version":w.version} for w in workers]},"imports":{"total":db.scalar(select(func.count()).select_from(ImportJob)) or 0,"active":queued+running,"failed":db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="FAILED")) or 0},"migration":migration,"environment":cfg.environment}

@@ -2,10 +2,9 @@
 import csv
 import json
 import os
-import tempfile
-import time
 from datetime import datetime, timezone
 from pathlib import Path
+from .import_storage import get_import_storage
 
 MAX_FILE_SIZE=500_000_000
 MAX_RECORD_CHARS=2_000_000
@@ -30,21 +29,9 @@ def validate_filename(filename,fmt):
     suffix=Path(filename).suffix.lower()
     if (fmt=="csv" and suffix!=".csv") or (fmt in {"json","jsonl"} and suffix not in {".json",".jsonl"}):raise ImportFailure("Filename does not match the selected format")
 
-def storage_root():
-    root=Path(os.getenv("IMPORT_TEMP_DIR") or tempfile.gettempdir())/"aiopt-web-imports";root.mkdir(mode=0o700,parents=True,exist_ok=True)
-    if root.is_symlink():raise ImportFailure("Import storage is unavailable")
-    return root
-
-def storage_path(storage_id):return storage_root()/f"{storage_id}.upload"
-def cancellation_path(storage_id):return storage_root()/f"{storage_id}.cancel"
-
-def cleanup_stale_files(max_age_seconds=86_400):
-    cutoff=time.time()-max_age_seconds;removed=0
-    for path in storage_root().glob("*.upload"):
-        try:
-            if path.is_file() and not path.is_symlink() and path.stat().st_mtime<cutoff:path.unlink();removed+=1
-        except OSError:pass
-    return removed
+def storage_path(storage_id):return get_import_storage()._path(storage_id)
+def cancellation_path(storage_id):return get_import_storage()._path(storage_id,".cancel")
+def cleanup_stale_files(max_age_seconds=86_400):return get_import_storage().cleanup_stale(max_age_seconds)
 
 def normalize_header(value):return str(value).strip().casefold().replace(" ","_")
 def auto_mapping(headers):return {h:REVERSE[n] for h in headers if (n:=normalize_header(h)) in REVERSE}
