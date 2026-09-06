@@ -3,7 +3,7 @@ from datetime import datetime,timedelta,timezone
 from fastapi import APIRouter,Depends,HTTPException,Query,Response
 from sqlalchemy import func,select
 from sqlalchemy.orm import Session
-from .auth import audit,require_csrf,require_operational_user
+from .auth import audit,require_admin,require_analyst,require_csrf,require_operational_user
 from .database import db_session
 from .models import Budget,ForecastRun,Integration,ScenarioRun,TelemetryEvent,User
 from .schemas import BudgetIn,IntegrationIn,ScenarioIn
@@ -13,7 +13,7 @@ router=APIRouter(prefix="/api/v1")
 def owner(user):return TelemetryEvent.user_id==user.id
 
 @router.post("/forecasts",status_code=201,dependencies=[Depends(require_csrf)])
-def forecast(metric:str=Query("spend",pattern=r"^(spend|tokens|requests)$"),horizon:int=Query(30,ge=7,le=365),user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def forecast(metric:str=Query("spend",pattern=r"^(spend|tokens|requests)$"),horizon:int=Query(30,ge=7,le=365),user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     expression={"spend":func.sum(TelemetryEvent.estimated_cost),"tokens":func.sum(TelemetryEvent.total_tokens),"requests":func.count()}[metric]
     rows=db.execute(select(func.date(TelemetryEvent.timestamp),expression).where(owner(user)).group_by(func.date(TelemetryEvent.timestamp)).order_by(func.date(TelemetryEvent.timestamp))).all()
     if len(rows)<7:raise HTTPException(422,"Not enough telemetry to generate a forecast")
@@ -54,22 +54,22 @@ def budget_json(row,db,user):
 @router.get("/budgets")
 def budgets(user:User=Depends(require_operational_user),db:Session=Depends(db_session)):return {"items":[budget_json(x,db,user) for x in db.scalars(select(Budget).where(Budget.user_id==user.id)).all()]}
 @router.post("/budgets",status_code=201,dependencies=[Depends(require_csrf)])
-def create_budget(payload:BudgetIn,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def create_budget(payload:BudgetIn,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     row=Budget(user_id=user.id,name=payload.name,monthly_amount=payload.monthly_amount,period=payload.period,warning_threshold=payload.warning_threshold,is_active=payload.is_active);db.add(row);db.flush();audit(db,"budget.created",actor=user.id,resource_type="budget",resource_id=row.id);db.commit();return budget_json(row,db,user)
 @router.patch("/budgets/{budget_id}",dependencies=[Depends(require_csrf)])
-def update_budget(budget_id:str,payload:BudgetIn,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def update_budget(budget_id:str,payload:BudgetIn,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     row=db.scalar(select(Budget).where(Budget.id==budget_id,Budget.user_id==user.id))
     if not row:raise HTTPException(404,"Budget not found")
     for key,value in payload.model_dump().items():setattr(row,"monthly_amount" if key=="monthly_amount" else key,value)
     audit(db,"budget.updated",actor=user.id,resource_type="budget",resource_id=row.id);db.commit();return budget_json(row,db,user)
 @router.delete("/budgets/{budget_id}",dependencies=[Depends(require_csrf)])
-def delete_budget(budget_id:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def delete_budget(budget_id:str,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     row=db.scalar(select(Budget).where(Budget.id==budget_id,Budget.user_id==user.id))
     if not row:raise HTTPException(404,"Budget not found")
     db.delete(row);audit(db,"budget.deleted",actor=user.id,resource_type="budget",resource_id=budget_id);db.commit();return {"deleted":budget_id}
 
 @router.post("/scenarios",status_code=201,dependencies=[Depends(require_csrf)])
-def scenario(payload:ScenarioIn,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def scenario(payload:ScenarioIn,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     inputs=payload.model_dump();cost=payload.monthly_requests*(payload.input_tokens_per_request*payload.input_price_per_million+payload.output_tokens_per_request*payload.output_price_per_million)/1_000_000;result={"monthly_cost":cost,"annual_cost":cost*12,"monthly_tokens":payload.monthly_requests*(payload.input_tokens_per_request+payload.output_tokens_per_request),"labels":{"inputs":"USER-SUPPLIED ASSUMPTIONS","outputs":"CALCULATED","quality":"NOT EVALUATED"}};row=ScenarioRun(user_id=user.id,parameters=inputs,result=result);db.add(row);db.flush();audit(db,"scenario.executed",actor=user.id,resource_type="scenario",resource_id=row.id);db.commit();return {"id":row.id,**result}
 @router.get("/scenarios")
 def scenarios(user:User=Depends(require_operational_user),db:Session=Depends(db_session)):return {"items":[{"id":x.id,"parameters":x.parameters,"result":x.result,"created_at":x.created_at} for x in db.scalars(select(ScenarioRun).where(ScenarioRun.user_id==user.id).order_by(ScenarioRun.created_at.desc())).all()]}
@@ -95,10 +95,10 @@ def integration_json(row):return {"id":row.id,"name":row.name,"kind":row.kind,"e
 @router.get("/integrations")
 def integrations(user:User=Depends(require_operational_user),db:Session=Depends(db_session)):return {"items":[integration_json(x) for x in db.scalars(select(Integration).where(Integration.user_id==user.id)).all()],"secret_storage":"environment reference"}
 @router.post("/integrations",status_code=201,dependencies=[Depends(require_csrf)])
-def create_integration(payload:IntegrationIn,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def create_integration(payload:IntegrationIn,user:User=Depends(require_admin),db:Session=Depends(db_session)):
     row=Integration(user_id=user.id,name=payload.name,kind=payload.kind,configuration={"endpoint":payload.endpoint},secret_reference=payload.secret_env_name);db.add(row);db.flush();audit(db,"integration.configured",actor=user.id,resource_type="integration",resource_id=row.id,kind=row.kind,credential_available=secret_store.exists(payload.secret_env_name) if payload.secret_env_name else False);db.commit();return integration_json(row)
 @router.delete("/integrations/{integration_id}",dependencies=[Depends(require_csrf)])
-def delete_integration(integration_id:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def delete_integration(integration_id:str,user:User=Depends(require_admin),db:Session=Depends(db_session)):
     row=db.scalar(select(Integration).where(Integration.id==integration_id,Integration.user_id==user.id))
     if not row:raise HTTPException(404,"Integration not found")
     db.delete(row);audit(db,"integration.deleted",actor=user.id,resource_type="integration",resource_id=integration_id);db.commit();return {"deleted":integration_id}

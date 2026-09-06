@@ -28,7 +28,7 @@ def login(client,identity="ordinary",password=PASSWORD):return client.post("/api
 def csrf(client):return {"X-CSRF-Token":client.cookies.get(CSRF_COOKIE)}
 
 def test_registration_normalizes_email_hashes_password_and_forces_user_role(client):
-    response=register(client,email="Ordinary@Example.Com");assert response.status_code==201;assert response.json()["user"]["role"]=="USER"
+    response=register(client,email="Ordinary@Example.Com");assert response.status_code==201;assert response.json()["user"]["role"]=="ANALYST"
     with SessionLocal() as db:
         user=db.scalar(select(User).where(User.username=="ordinary"));assert user.email=="ordinary@example.com";assert user.password_hash!=PASSWORD;assert verify_password(user.password_hash,PASSWORD)
     payload={"display_name":"Bad","username":"badadmin","email":"bad@example.com","password":PASSWORD,"confirm_password":PASSWORD,"role":"ADMIN"}
@@ -91,7 +91,7 @@ def test_rbac_admin_users_and_final_admin_protection(client):
     assert client.patch(f"/api/v1/admin/users/{ordinary['id']}",headers=csrf(client),json={"is_active":False}).status_code==200
     with SessionLocal() as db:
         beyond=db.scalar(select(User).where(User.username=="Beyond"));beyond.is_active=False;db.commit();sith=db.scalar(select(User).where(User.username=="Sith"));sith_id=sith.id
-    assert client.patch(f"/api/v1/admin/users/{sith_id}",headers=csrf(client),json={"role":"USER"}).status_code==409
+    assert client.patch(f"/api/v1/admin/users/{sith_id}",headers=csrf(client),json={"role":"VIEWER"}).status_code==409
 
 def test_user_data_isolation_and_owner_scoped_reset(client):
     register(client,"first","first@example.com");login(client,"first");assert client.post("/api/v1/telemetry",headers=csrf(client),json={"provider":"p","model":"m","application":"a","input_tokens":10}).status_code==201

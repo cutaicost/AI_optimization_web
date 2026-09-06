@@ -13,6 +13,12 @@ class Settings:
     allowed_origins: tuple[str, ...]
     session_ttl_seconds: int
     cookie_secure: bool
+    oidc_issuer: str
+    oidc_client_id: str
+    oidc_client_secret: str
+    oidc_redirect_uri: str
+    oidc_role_claim: str
+    oidc_role_map: dict[str,str]
 
 def settings() -> Settings:
     environment = os.getenv("APP_ENV", "development").lower()
@@ -23,4 +29,7 @@ def settings() -> Settings:
     origins = tuple(value.strip() for value in os.getenv("ALLOWED_ORIGINS", "http://127.0.0.1:3000").split(",") if value.strip())
     if environment == "production" and (not origins or "*" in origins):
         raise RuntimeError("Production ALLOWED_ORIGINS must be explicit")
-    return Settings(environment, database_url, secret, origins, int(os.getenv("SESSION_TTL_SECONDS", "28800")), os.getenv("COOKIE_SECURE", "false").lower() == "true" or environment == "production")
+    role_map={}
+    for pair in os.getenv("OIDC_ROLE_MAP","viewer=VIEWER,analyst=ANALYST,administrator=ADMIN").split(","):
+        if "=" in pair:key,value=pair.split("=",1);role_map[key.strip()]=value.strip().upper()
+    return Settings(environment, database_url, secret, origins, int(os.getenv("SESSION_TTL_SECONDS", "28800")), os.getenv("COOKIE_SECURE", "false").lower() == "true" or environment == "production",os.getenv("OIDC_ISSUER","").rstrip("/"),os.getenv("OIDC_CLIENT_ID",""),os.getenv("OIDC_CLIENT_SECRET",""),os.getenv("OIDC_REDIRECT_URI","http://127.0.0.1:8000/api/v1/auth/oidc/callback"),os.getenv("OIDC_ROLE_CLAIM","roles"),role_map)

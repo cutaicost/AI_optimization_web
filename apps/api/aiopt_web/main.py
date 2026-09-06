@@ -1,15 +1,16 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from time import monotonic
-import secrets
+import json,secrets
 import os,threading,time
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import case, delete, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from .auth import CSRF_COOKIE,SESSION_COOKIE,audit,bootstrap_admins,create_session,current_session,enforce_rate_limit,login_limited,public_user,require_admin,require_csrf,require_operational_user,require_user
+from .auth import CSRF_COOKIE,SESSION_COOKIE,audit,bootstrap_admins,create_session,current_session,enforce_rate_limit,login_limited,public_user,require_admin,require_analyst,require_csrf,require_operational_user,require_user
 from .config import VERSION,settings
 from .database import Base,SessionLocal,db_session,engine
 from .models import AuditEvent,ImportJob,LoginAttempt,Session as UserSession,TelemetryEvent,User,WorkerInstance
@@ -17,6 +18,10 @@ from .schemas import AdminUserUpdateIn,EventIn,LoginIn,PasswordChangeIn,ProfileI
 from .security import hash_password,utcnow,verify_password
 from .product import router as product_router
 from .advanced import router as advanced_router
+from .oidc import router as oidc_router
+from .enterprise import router as enterprise_router
+from .provider_api import router as provider_api_router
+from .cost_engine import CostCalculator
 from .import_storage import get_import_storage
 from .telemetry_import import cleanup_stale_files
 
@@ -48,6 +53,9 @@ async def lifespan(_):
 app=FastAPI(title="AI Optimization Tool Web API",version=VERSION,lifespan=lifespan)
 app.include_router(product_router)
 app.include_router(advanced_router)
+app.include_router(oidc_router)
+app.include_router(enterprise_router)
+app.include_router(provider_api_router)
 app.add_middleware(CORSMiddleware,allow_origins=list(cfg.allowed_origins),allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE"],allow_headers=["Content-Type","X-CSRF-Token"])
 
 @app.middleware("http")
@@ -74,7 +82,7 @@ def register(payload:RegisterIn,request:Request,db:Session=Depends(db_session)):
     if username in {"sith","beyond"}:
         raise HTTPException(409,"This username is reserved")
     if db.scalar(select(User.id).where(or_(func.lower(User.username)==username,func.lower(User.email)==email))):raise HTTPException(409,"An account with those details already exists")
-    user=User(username=payload.username,email=email,display_name=payload.display_name,password_hash=hash_password(payload.password),role="USER",organization=payload.organization,job_title=payload.job_title)
+    user=User(username=payload.username,email=email,display_name=payload.display_name,password_hash=hash_password(payload.password),role="ANALYST",organization=payload.organization,job_title=payload.job_title)
     db.add(user)
     try:db.flush();audit(db,"account.registered",actor=user.id,resource_type="user",resource_id=user.id);db.commit()
     except IntegrityError:db.rollback();raise HTTPException(409,"An account with those details already exists")
@@ -129,14 +137,16 @@ def overview(user:User=Depends(require_operational_user),db:Session=Depends(db_s
     models=db.execute(select(TelemetryEvent.model,func.count()).where(owner).group_by(TelemetryEvent.model).order_by(func.count().desc()).limit(5)).all()
     latest=db.scalar(select(ImportJob).where(ImportJob.user_id==user.id).order_by(ImportJob.created_at.desc()).limit(1))
     recent=db.execute(select(TelemetryEvent.timestamp,TelemetryEvent.application,TelemetryEvent.model).where(owner).order_by(TelemetryEvent.timestamp.desc()).limit(5)).all()
-    return {"requests":row[0],"tokens":row[1],"spend":float(row[2]),"latency_ms":float(row[3]),"models_used":len(models),"models":[{"name":name,"requests":count} for name,count in models],"latest_import":{"filename":latest.filename,"status":latest.status,"inserted_rows":latest.rows_imported,"created_at":latest.created_at} if latest else None,"recent_activity":[{"timestamp":time,"application":application,"model":model} for time,application,model in recent]}
+    provenance={name:count for name,count in db.execute(select(TelemetryEvent.provenance,func.count()).where(owner).group_by(TelemetryEvent.provenance)).all()}
+    return {"requests":row[0],"tokens":row[1],"spend":float(row[2]),"latency_ms":float(row[3]),"models_used":len(models),"provenance":provenance,"live":sum(count for name,count in provenance.items() if name in {"PROVIDER_SYNC","GATEWAY"})>0,"models":[{"name":name,"requests":count} for name,count in models],"latest_import":{"filename":latest.filename,"status":latest.status,"inserted_rows":latest.rows_imported,"created_at":latest.created_at} if latest else None,"recent_activity":[{"timestamp":time,"application":application,"model":model} for time,application,model in recent]}
 
 @app.post("/api/v1/telemetry",status_code=201,dependencies=[Depends(require_csrf)])
-def ingest(payload:EventIn,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
-    row=TelemetryEvent(user_id=user.id,provider=payload.provider,model=payload.model,application=payload.application,input_tokens=payload.input_tokens,output_tokens=payload.output_tokens,total_tokens=payload.input_tokens+payload.output_tokens,duration_ms=payload.duration_ms,estimated_cost=payload.estimated_cost,metadata_json=payload.metadata);db.add(row);db.commit();return {"id":row.id}
+def ingest(payload:EventIn,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
+    at=utcnow();calculated=CostCalculator(db).calculate(payload.provider,payload.model,at,payload.input_tokens,payload.output_tokens);recorded=payload.estimated_cost if "estimated_cost" in payload.model_fields_set else None;display_cost=float(calculated.total_cost) if calculated else float(recorded or 0)
+    row=TelemetryEvent(user_id=user.id,provider=payload.provider,model=payload.model,application=payload.application,input_tokens=payload.input_tokens,output_tokens=payload.output_tokens,total_tokens=payload.input_tokens+payload.output_tokens,duration_ms=payload.duration_ms,estimated_cost=display_cost,provider_recorded_cost=recorded,calculated_cost=calculated.total_cost if calculated else None,pricing_record_id=calculated.pricing_record_id if calculated else None,provenance="DIRECT_API",metadata_json=payload.metadata);db.add(row);db.commit();return {"id":row.id,"cost":{"provider_recorded":recorded,"calculated":calculated.total_cost if calculated else None,"pricing_known":calculated is not None}}
 
 @app.delete("/api/v1/telemetry",dependencies=[Depends(require_csrf)])
-def clear_telemetry(user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def clear_telemetry(user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     jobs=db.scalars(select(ImportJob).where(ImportJob.user_id==user.id)).all()
     count=db.execute(delete(TelemetryEvent).where(TelemetryEvent.user_id==user.id)).rowcount
     db.execute(delete(ImportJob).where(ImportJob.user_id==user.id));audit(db,"telemetry.cleared",actor=user.id,resource_type="telemetry",records=count,imports=len(jobs));db.commit()
@@ -187,10 +197,30 @@ def admin_audit(q:str="",action:str="",outcome:str="",limit:int=Query(100,ge=1,l
 
 @app.get("/api/v1/admin/system")
 def admin_system(_:User=Depends(require_admin),db:Session=Depends(db_session)):
+    return system_data(db)
+def system_data(db):
     db.execute(text("SELECT 1"))
     try:migration=db.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none() or "unversioned"
     except Exception:migration="unversioned"
     queued=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="QUEUED")) or 0;running=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status.in_(["PREPARING","IMPORTING","CANCELLING"]))) or 0;oldest=db.scalar(select(func.min(ImportJob.updated_at)).where(ImportJob.status.in_(["QUEUED","PREPARING","IMPORTING","CANCELLING"])))
     from .models import ForecastRun
-    cutoff=utcnow()-timedelta(seconds=90);workers=db.scalars(select(WorkerInstance).order_by(WorkerInstance.last_heartbeat_at.desc())).all();cancelling=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="CANCELLING")) or 0;oldest_age=max(0,int((utcnow()-aware(oldest)).total_seconds())) if oldest else None
-    return {"application_version":VERSION,"api_version":"v1","database":"connected","uptime_seconds":round(monotonic()-STARTED,2),"user_count":db.scalar(select(func.count()).select_from(User)) or 0,"telemetry_rows":db.scalar(select(func.count()).select_from(TelemetryEvent)) or 0,"forecast_runs":db.scalar(select(func.count()).select_from(ForecastRun)) or 0,"worker":{"status":"working" if running else "idle-or-offline","queued":queued,"running":running,"cancelling":cancelling,"active_workers":sum(aware(w.last_heartbeat_at)>=cutoff and w.status!="OFFLINE" for w in workers),"stale_workers":sum(aware(w.last_heartbeat_at)<cutoff or w.status=="OFFLINE" for w in workers),"oldest_job_at":oldest,"oldest_job_age_seconds":oldest_age,"instances":[{"worker_id":w.worker_id,"status":"OFFLINE" if aware(w.last_heartbeat_at)<cutoff else w.status,"current_job_id":w.current_job_id,"last_heartbeat_at":w.last_heartbeat_at,"hostname":w.hostname,"version":w.version} for w in workers]},"imports":{"total":db.scalar(select(func.count()).select_from(ImportJob)) or 0,"active":queued+running,"failed":db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="FAILED")) or 0},"migration":migration,"environment":cfg.environment}
+    cutoff=utcnow()-timedelta(seconds=90);workers=db.scalars(select(WorkerInstance).order_by(WorkerInstance.last_heartbeat_at.desc())).all();cancelling=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="CANCELLING")) or 0;oldest_age=max(0,int((utcnow()-aware(oldest)).total_seconds())) if oldest else None;storage=get_import_storage();last_success=db.scalar(select(ImportJob).where(ImportJob.status=="COMPLETED").order_by(ImportJob.completed_at.desc()).limit(1));last_failure=db.scalar(select(ImportJob).where(ImportJob.status=="FAILED").order_by(ImportJob.completed_at.desc()).limit(1))
+    return {"frontend_version":VERSION,"backend_version":VERSION,"application_version":VERSION,"api_version":"v1","schema_version":migration,"migration":migration,"database_type":engine.dialect.name,"database_health":"connected","database":"connected","environment":cfg.environment,"uptime_seconds":round(monotonic()-STARTED,2),"runtime_mode":os.getenv("RUNTIME_MODE","server"),"rbac_mode":"OIDC claims" if cfg.oidc_issuer else "local roles","oidc_enabled":bool(cfg.oidc_issuer and cfg.oidc_client_id),"storage":{"type":type(storage).__name__,"root":str(getattr(storage,"root","deployment-managed"))},"user_count":db.scalar(select(func.count()).select_from(User)) or 0,"telemetry_rows":db.scalar(select(func.count()).select_from(TelemetryEvent)) or 0,"forecast_runs":db.scalar(select(func.count()).select_from(ForecastRun)) or 0,"worker":{"status":"working" if running else "idle-or-offline","queued":queued,"running":running,"cancelling":cancelling,"active_workers":sum(aware(w.last_heartbeat_at)>=cutoff and w.status!="OFFLINE" for w in workers),"stale_workers":sum(aware(w.last_heartbeat_at)<cutoff or w.status=="OFFLINE" for w in workers),"oldest_job_at":oldest,"oldest_job_age_seconds":oldest_age,"instances":[{"worker_id":w.worker_id,"status":"OFFLINE" if aware(w.last_heartbeat_at)<cutoff else w.status,"current_job_id":w.current_job_id,"last_heartbeat_at":w.last_heartbeat_at,"version":w.version,"last_completed_job_id":w.last_completed_job_id,"recent_failure":w.recent_failure} for w in workers]},"imports":{"total":db.scalar(select(func.count()).select_from(ImportJob)) or 0,"active":queued+running,"failed":db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="FAILED")) or 0,"last_success":{"id":last_success.id,"completed_at":last_success.completed_at} if last_success else None,"last_failure":{"id":last_failure.id,"completed_at":last_failure.completed_at} if last_failure else None}}
+
+@app.get("/api/v1/admin/system/export")
+def export_system(_:User=Depends(require_admin),db:Session=Depends(db_session)):
+    return Response(json.dumps(system_data(db),default=str),media_type="application/json",headers={"Content-Disposition":"attachment; filename=tokenscope-diagnostics.json"})
+
+# The production image copies Vite's output here. This catch-all is deliberately
+# registered after every API route so API handlers always take precedence.
+DIST_ROOT=Path(__file__).resolve().parents[3]/"dist"
+@app.api_route("/{full_path:path}",methods=["GET","HEAD"],include_in_schema=False)
+def frontend(full_path:str):
+    if full_path=="api" or full_path.startswith("api/"):
+        return JSONResponse({"detail":"Not Found"},status_code=404)
+    requested=(DIST_ROOT/full_path).resolve()
+    if full_path and requested.is_relative_to(DIST_ROOT.resolve()) and requested.is_file():
+        return FileResponse(requested)
+    index=DIST_ROOT/"index.html"
+    if index.is_file():return FileResponse(index)
+    return JSONResponse({"detail":"Frontend build is unavailable"},status_code=404)

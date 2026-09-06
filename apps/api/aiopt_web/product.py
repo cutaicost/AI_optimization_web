@@ -3,7 +3,7 @@ from secrets import token_hex
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
-from .auth import audit,require_csrf,require_operational_user
+from .auth import audit,require_analyst,require_csrf,require_operational_user
 from .database import db_session
 from .models import ImportJob,TelemetryEvent,User
 from .schemas import ImportCommitIn,ImportStartIn
@@ -26,7 +26,7 @@ def unlink(job):
     except OSError:pass
 
 @router.post("/import/start",status_code=201,dependencies=[Depends(require_csrf)])
-def start_import(payload:ImportStartIn,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def start_import(payload:ImportStartIn,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     try:validate_filename(payload.filename,payload.format)
     except ImportFailure as error:raise HTTPException(400,str(error))
     active=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.user_id==user.id,ImportJob.status.in_(["CREATED","UPLOADED","ANALYZING","READY","IMPORTING"]))) or 0
@@ -36,7 +36,7 @@ def start_import(payload:ImportStartIn,user:User=Depends(require_operational_use
     return {"import":job_json(job)}
 
 @router.post("/import/{import_id}/upload",dependencies=[Depends(require_csrf)])
-async def upload_import(import_id:str,file:UploadFile=File(...),user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+async def upload_import(import_id:str,file:UploadFile=File(...),user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     job=owned_job(db,user,import_id)
     if job.status!="CREATED":raise HTTPException(409,"This import has already been uploaded")
     storage=get_import_storage();received=0
@@ -55,7 +55,7 @@ async def upload_import(import_id:str,file:UploadFile=File(...),user:User=Depend
     job.status="UPLOADED";db.commit();return {"import":job_json(job)}
 
 @router.post("/import/{import_id}/analyze",dependencies=[Depends(require_csrf)])
-def analyze_import(import_id:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def analyze_import(import_id:str,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     job=owned_job(db,user,import_id)
     if job.status not in {"UPLOADED","READY"}:raise HTTPException(409,"Import is not ready for analysis")
     storage=get_import_storage()
@@ -80,14 +80,14 @@ def analyze_import(import_id:str,user:User=Depends(require_operational_user),db:
 def import_status(import_id:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):return {"import":job_json(owned_job(db,user,import_id))}
 
 @router.post("/import/{import_id}/commit",status_code=202,dependencies=[Depends(require_csrf)])
-def commit_import(import_id:str,payload:ImportCommitIn,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def commit_import(import_id:str,payload:ImportCommitIn,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     job=owned_job(db,user,import_id)
     if job.status!="READY":raise HTTPException(409,"Import is not ready to commit")
     if not {"application","provider","model"}.issubset(set(payload.mapping.values())):raise HTTPException(422,"Mapping must include application, provider, and model")
     job.status="QUEUED";job.mapping=payload.mapping;job.failure_reason=None;audit(db,"import.queued",actor=user.id,resource_type="import",resource_id=job.id);db.commit();return {"import":job_json(job)}
 
 @router.post("/import/{import_id}/cancel",dependencies=[Depends(require_csrf)])
-def cancel_import(import_id:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+def cancel_import(import_id:str,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     job=owned_job(db,user,import_id)
     if job.status in {"COMPLETED","FAILED","CANCELLED"}:raise HTTPException(409,"Import can no longer be cancelled")
     if job.status in {"PREPARING","IMPORTING"}:
@@ -115,8 +115,9 @@ def usage(user:User=Depends(require_operational_user),db:Session=Depends(db_sess
 @router.get("/costs")
 def costs(user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
     total=float(db.scalar(select(func.coalesce(func.sum(TelemetryEvent.estimated_cost),0)).where(TelemetryEvent.user_id==user.id)) or 0);requests=db.scalar(select(func.count()).select_from(TelemetryEvent).where(TelemetryEvent.user_id==user.id)) or 0
+    recorded=db.scalar(select(func.sum(TelemetryEvent.provider_recorded_cost)).where(TelemetryEvent.user_id==user.id));calculated=db.scalar(select(func.sum(TelemetryEvent.calculated_cost)).where(TelemetryEvent.user_id==user.id))
     trend=[{"date":str(day),"cost":float(cost or 0)} for day,cost in db.execute(select(func.date(TelemetryEvent.timestamp),func.sum(TelemetryEvent.estimated_cost)).where(TelemetryEvent.user_id==user.id).group_by(func.date(TelemetryEvent.timestamp)).order_by(func.date(TelemetryEvent.timestamp))).all()]
-    return {"total_spend":total,"average_per_request":total/requests if requests else 0,"trend":trend,"applications":breakdown(db,user,TelemetryEvent.application,TelemetryEvent.estimated_cost),"providers":breakdown(db,user,TelemetryEvent.provider,TelemetryEvent.estimated_cost),"models":breakdown(db,user,TelemetryEvent.model,TelemetryEvent.estimated_cost)}
+    return {"total_spend":total,"provider_recorded_spend":float(recorded) if recorded is not None else None,"calculated_spend":float(calculated) if calculated is not None else None,"cost_basis":"MIXED" if recorded is not None and calculated is not None else "CALCULATED" if calculated is not None else "PROVIDER_REPORTED_OR_IMPORTED" if recorded is not None else "UNKNOWN","average_per_request":total/requests if requests else 0,"trend":trend,"applications":breakdown(db,user,TelemetryEvent.application,TelemetryEvent.estimated_cost),"providers":breakdown(db,user,TelemetryEvent.provider,TelemetryEvent.estimated_cost),"models":breakdown(db,user,TelemetryEvent.model,TelemetryEvent.estimated_cost)}
 
 @router.get("/models")
 def models(user:User=Depends(require_operational_user),db:Session=Depends(db_session)):

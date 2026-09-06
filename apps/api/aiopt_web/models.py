@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from uuid import uuid4
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
@@ -14,7 +14,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(100))
     password_hash: Mapped[str] = mapped_column(String(512))
-    role: Mapped[str] = mapped_column(String(20), default="USER", index=True)
+    role: Mapped[str] = mapped_column(String(20), default="ANALYST", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     organization: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -35,6 +35,23 @@ class Session(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     user: Mapped[User] = relationship()
 
+class OidcIdentity(Base):
+    __tablename__="oidc_identities"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier)
+    issuer:Mapped[str]=mapped_column(String(500))
+    subject:Mapped[str]=mapped_column(String(255))
+    user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True)
+    created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+    last_login_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+    __table_args__=(UniqueConstraint("issuer","subject",name="uq_oidc_issuer_subject"),)
+
+class OidcLoginState(Base):
+    __tablename__="oidc_login_states"
+    state_hash:Mapped[str]=mapped_column(String(64),primary_key=True)
+    nonce:Mapped[str]=mapped_column(String(128))
+    code_verifier:Mapped[str]=mapped_column(String(128))
+    expires_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),index=True)
+
 class TelemetryEvent(Base):
     __tablename__ = "telemetry_events"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
@@ -49,6 +66,10 @@ class TelemetryEvent(Base):
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)
     duration_ms: Mapped[float] = mapped_column(Float, default=0)
     estimated_cost: Mapped[float] = mapped_column(Float, default=0)
+    provider_recorded_cost: Mapped[float | None] = mapped_column(Numeric(24,12), nullable=True)
+    calculated_cost: Mapped[float | None] = mapped_column(Numeric(24,12), nullable=True)
+    pricing_record_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    provenance: Mapped[str] = mapped_column(String(30), default="LEGACY", index=True)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
     source: Mapped[str] = mapped_column(String(50), default="api")
     import_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
@@ -100,6 +121,7 @@ class AuditEvent(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
     actor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    actor_role: Mapped[str | None] = mapped_column(String(20), nullable=True)
     action: Mapped[str] = mapped_column(String(100), index=True)
     outcome: Mapped[str] = mapped_column(String(20), default="success")
     resource_type: Mapped[str] = mapped_column(String(60))
@@ -130,6 +152,15 @@ class WorkerInstance(Base):
     current_job_id:Mapped[str|None]=mapped_column(String(36),nullable=True,index=True)
     status:Mapped[str]=mapped_column(String(20),default="STARTING",index=True)
     version:Mapped[str]=mapped_column(String(30))
+    last_completed_job_id:Mapped[str|None]=mapped_column(String(36),nullable=True)
+    recent_failure:Mapped[str|None]=mapped_column(String(200),nullable=True)
+
+class EnterpriseSetting(Base):
+    __tablename__="enterprise_settings"
+    key:Mapped[str]=mapped_column(String(100),primary_key=True)
+    value_json:Mapped[dict]=mapped_column(JSON,default=dict)
+    updated_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now,onupdate=now)
+    updated_by:Mapped[str|None]=mapped_column(String(36),nullable=True)
 
 # Reserved durable entities for incremental feature migration.
 class ForecastRun(Base):
@@ -144,3 +175,9 @@ class PriceOverride(Base):
     __tablename__="price_overrides";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);provider:Mapped[str]=mapped_column(String(80));model:Mapped[str]=mapped_column(String(160));input_price:Mapped[float]=mapped_column(Float);output_price:Mapped[float]=mapped_column(Float);__table_args__=(UniqueConstraint("user_id","provider","model",name="uq_price_owner_model"),)
 class ModelEvaluation(Base):
     __tablename__="model_evaluations";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);model:Mapped[str]=mapped_column(String(160));metric:Mapped[str]=mapped_column(String(100));score:Mapped[float]=mapped_column(Float);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+class ProviderCredential(Base):
+    __tablename__="provider_credentials";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);provider:Mapped[str]=mapped_column(String(80));encrypted_credential:Mapped[str]=mapped_column(Text);key_version:Mapped[int]=mapped_column(Integer,default=1);masked_identifier:Mapped[str|None]=mapped_column(String(32),nullable=True);validation_status:Mapped[str]=mapped_column(String(40),default="UNKNOWN");last_validated_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);updated_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now,onupdate=now);__table_args__=(UniqueConstraint("user_id","provider",name="uq_provider_credential_owner"),)
+class ProviderModel(Base):
+    __tablename__="provider_models";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);provider:Mapped[str]=mapped_column(String(80));model_id:Mapped[str]=mapped_column(String(160));owned_by:Mapped[str|None]=mapped_column(String(120),nullable=True);provider_created_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True);context_window:Mapped[int|None]=mapped_column(Integer,nullable=True);modalities:Mapped[list|None]=mapped_column(JSON,nullable=True);capabilities:Mapped[dict|None]=mapped_column(JSON,nullable=True);last_seen_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);__table_args__=(UniqueConstraint("user_id","provider","model_id",name="uq_provider_model_owner"),)
+class PricingRecord(Base):
+    __tablename__="pricing_records";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);provider:Mapped[str]=mapped_column(String(80),index=True);model:Mapped[str]=mapped_column(String(160),index=True);effective_from:Mapped[datetime]=mapped_column(DateTime(timezone=True),index=True);effective_to:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True,index=True);pricing_unit:Mapped[str]=mapped_column(String(40),default="PER_MILLION_TOKENS");input_price:Mapped[float]=mapped_column(Numeric(24,12));output_price:Mapped[float]=mapped_column(Numeric(24,12));cached_input_price:Mapped[float|None]=mapped_column(Numeric(24,12),nullable=True);currency:Mapped[str]=mapped_column(String(3),default="USD");region:Mapped[str|None]=mapped_column(String(80),nullable=True);provenance:Mapped[str]=mapped_column(String(500));last_verified_at:Mapped[datetime]=mapped_column(DateTime(timezone=True));__table_args__=(UniqueConstraint("provider","model","effective_from","region",name="uq_pricing_version"),)

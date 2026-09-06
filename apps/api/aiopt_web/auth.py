@@ -13,7 +13,7 @@ SESSION_COOKIE="aiopt_session";CSRF_COOKIE="aiopt_csrf"
 
 def audit(db,action,outcome="success",actor=None,resource_type="security",resource_id=None,**metadata):
     safe={k:v for k,v in metadata.items() if not any(word in k.lower() for word in ("password","secret","token","credential"))}
-    db.add(AuditEvent(actor_user_id=actor,action=action,outcome=outcome,resource_type=resource_type,resource_id=resource_id,metadata_json=safe))
+    user=db.get(User,actor) if actor else None;db.add(AuditEvent(actor_user_id=actor,actor_role=user.role if user else None,action=action,outcome=outcome,resource_type=resource_type,resource_id=resource_id,metadata_json=safe))
 
 def public_user(user:User):
     return {"id":user.id,"username":user.username,"email":user.email,"display_name":user.display_name,"role":user.role,"is_active":user.is_active,"must_change_password":user.must_change_password,"organization":user.organization,"job_title":user.job_title,"preferences":user.preferences,"created_at":user.created_at,"last_login_at":user.last_login_at}
@@ -33,6 +33,10 @@ def require_user(request:Request,db:Session=Depends(db_session)):
 def require_operational_user(user:User=Depends(require_user)):
     if user.must_change_password:
         raise HTTPException(428,"Password change required")
+    return user
+
+def require_analyst(user:User=Depends(require_operational_user)):
+    if user.role not in {"ANALYST","ADMIN"}:raise HTTPException(403,"Analyst access required")
     return user
 
 def require_admin(user:User=Depends(require_operational_user)):

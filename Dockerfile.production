@@ -1,0 +1,25 @@
+FROM node:22-alpine AS frontend-build
+WORKDIR /build
+COPY package.json package-lock.json vite.config.js ./
+COPY apps/web ./apps/web
+RUN npm ci && npm run build
+
+FROM python:3.11-slim AS runtime
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_ENV=production
+WORKDIR /app
+COPY apps/api/requirements.txt ./apps/api/requirements.txt
+RUN pip install --no-cache-dir -r apps/api/requirements.txt \
+    && addgroup --system app \
+    && adduser --system --ingroup app app
+COPY apps/api ./apps/api
+COPY migrations ./migrations
+COPY scripts/bootstrap-admins.py ./scripts/bootstrap-admins.py
+COPY alembic.ini VERSION ./
+COPY --from=frontend-build /build/dist ./dist
+RUN mkdir -p /var/lib/aiopt/imports \
+    && chown -R app:app /app /var/lib/aiopt
+USER app
+EXPOSE 8000
+CMD ["sh","-c","python scripts/bootstrap-admins.py && exec uvicorn apps.api.aiopt_web.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]

@@ -28,12 +28,13 @@ def test_forecast_optimization_anomaly_budget_scenario_report_integration_and_ow
     assert client.get('/api/v1/optimization').status_code==200;assert client.get('/api/v1/anomalies').status_code==200
     budget=client.post('/api/v1/budgets',headers=headers,json={'name':'Monthly','monthly_amount':100,'period':'monthly','warning_threshold':80,'is_active':True});assert budget.status_code==201;budget_id=budget.json()['id']
     scenario=client.post('/api/v1/scenarios',headers=headers,json={'name':'Plan','monthly_requests':1000,'input_tokens_per_request':100,'output_tokens_per_request':20,'input_price_per_million':2,'output_price_per_million':4});assert scenario.status_code==201;scenario_id=scenario.json()['id']
+    with SessionLocal() as db:user=db.scalar(select(User).where(User.username=='owner'));user.role='ADMIN';db.commit()
     integration=client.post('/api/v1/integrations',headers=headers,json={'name':'OTel','kind':'opentelemetry','endpoint':'https://collector.invalid','secret_env_name':'OTEL_API_KEY'});assert integration.status_code==201;integration_id=integration.json()['id'];assert 'API_KEY' not in integration.text
     assert client.get('/api/v1/reports/executive').json()['requests']==10;csv=client.get('/api/v1/reports/executive.csv');assert csv.status_code==200 and 'text/csv' in csv.headers['content-type']
     client.cookies.clear();login(client,'other')
     assert client.get(f'/api/v1/forecasts/runs/{forecast_id}').status_code==404;assert client.get(f'/api/v1/scenarios/{scenario_id}').status_code==404
     assert client.patch(f'/api/v1/budgets/{budget_id}',headers=csrf(client),json={'name':'X','monthly_amount':1,'period':'monthly','warning_threshold':80,'is_active':True}).status_code==404
-    assert client.delete(f'/api/v1/integrations/{integration_id}',headers=csrf(client)).status_code==404
+    assert client.delete(f'/api/v1/integrations/{integration_id}',headers=csrf(client)).status_code==403
     assert client.get('/api/v1/budgets').json()['items']==[];assert client.get('/api/v1/scenarios').json()['items']==[];assert client.get('/api/v1/integrations').json()['items']==[]
 def test_forecast_requires_history(client):login(client,'owner');assert client.post('/api/v1/forecasts',headers=csrf(client)).status_code==422
 def test_worker_claim_is_atomic_and_stale_jobs_requeue():

@@ -6,7 +6,7 @@ This repository is independent from the desktop application. The first milestone
 
 ## Quick start
 
-Requirements: Python 3.12+, Node.js 22+, and PowerShell.
+Requirements: Python 3.11+, Node.js 22+, and PowerShell.
 
 1. Copy `.env.example` to `.env` and provide development values. Admin passwords must be at least 12 characters; omit them if bootstrap accounts are not needed.
 2. Create `.venv`, install `apps/api/requirements.txt`, and run `npm install`.
