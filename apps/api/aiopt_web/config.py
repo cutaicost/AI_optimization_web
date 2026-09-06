@@ -23,6 +23,10 @@ class Settings:
 def settings() -> Settings:
     environment = os.getenv("APP_ENV", "development").lower()
     database_url = os.getenv("DATABASE_URL") or f"sqlite:///{(ROOT / 'development.sqlite').as_posix()}"
+    if environment == "production" and not os.getenv("DATABASE_URL"):
+        raise RuntimeError("DATABASE_URL is required in production")
+    if environment == "production" and not database_url.startswith(("postgres://", "postgresql://", "postgresql+psycopg://")):
+        raise RuntimeError("Production DATABASE_URL must use PostgreSQL")
     secret = os.getenv("SESSION_SECRET", "")
     if environment == "production" and len(secret) < 32:
         raise RuntimeError("SESSION_SECRET must contain at least 32 characters in production")

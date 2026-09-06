@@ -30,7 +30,7 @@ def aware(value):return value.replace(tzinfo=timezone.utc) if value and value.tz
 
 @asynccontextmanager
 async def lifespan(_):
-    Base.metadata.create_all(engine)
+    if cfg.environment != "production":Base.metadata.create_all(engine)
     cleanup_stale_files()
     with SessionLocal() as db:
         bootstrap_admins(db)
@@ -75,6 +75,12 @@ def health(db:Session=Depends(db_session)):
     try:db.execute(text("SELECT 1"));database="connected";status="healthy"
     except Exception:database="unavailable";status="degraded"
     return {"status":status,"version":VERSION,"uptime_seconds":round(monotonic()-STARTED,2),"database":database}
+
+@app.get("/health",include_in_schema=False)
+def deployment_health(db:Session=Depends(db_session)):
+    try:db.execute(text("SELECT 1"))
+    except Exception:return JSONResponse({"status":"unavailable"},status_code=503)
+    return {"status":"ok"}
 
 @app.post("/api/v1/auth/register",status_code=201)
 def register(payload:RegisterIn,request:Request,db:Session=Depends(db_session)):

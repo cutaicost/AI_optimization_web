@@ -7,7 +7,10 @@ from apps.api.aiopt_web import models  # noqa: F401
 
 config=context.config
 if config.config_file_name:fileConfig(config.config_file_name)
-config.set_main_option("sqlalchemy.url",settings().database_url.replace("%","%%"))
+database_url=settings().database_url
+if database_url.startswith("postgres://"):database_url="postgresql+psycopg://"+database_url.removeprefix("postgres://")
+elif database_url.startswith("postgresql://"):database_url="postgresql+psycopg://"+database_url.removeprefix("postgresql://")
+config.set_main_option("sqlalchemy.url",database_url.replace("%","%%"))
 target_metadata=Base.metadata
 def run_migrations_offline():
     context.configure(url=config.get_main_option("sqlalchemy.url"),target_metadata=target_metadata,literal_binds=True,compare_type=True)
