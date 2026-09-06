@@ -22,8 +22,9 @@ class Settings:
 
 def settings() -> Settings:
     environment = os.getenv("APP_ENV", "development").lower()
-    database_url = os.getenv("DATABASE_URL") or f"sqlite:///{(ROOT / 'development.sqlite').as_posix()}"
-    if environment == "production" and not os.getenv("DATABASE_URL"):
+    raw_database_url = os.environ.get("DATABASE_URL")
+    database_url = raw_database_url or f"sqlite:///{(ROOT / 'development.sqlite').as_posix()}"
+    if environment == "production" and not raw_database_url:
         raise RuntimeError("DATABASE_URL is required in production")
     if environment == "production" and not database_url.startswith(("postgres://", "postgresql://", "postgresql+psycopg://")):
         raise RuntimeError("Production DATABASE_URL must use PostgreSQL")
