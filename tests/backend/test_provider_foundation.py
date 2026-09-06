@@ -8,7 +8,7 @@ from apps.api.aiopt_web.auth import CSRF_COOKIE
 from apps.api.aiopt_web.cost_engine import CostCalculator
 from apps.api.aiopt_web.database import Base,SessionLocal,engine
 from apps.api.aiopt_web.main import app
-from apps.api.aiopt_web.models import PricingRecord,ProviderCredential
+from apps.api.aiopt_web.models import PricingRecord,ProviderCredential,User
 from apps.api.aiopt_web.provider_credentials import CredentialConfigurationError,decrypt_credential,encrypt_credential
 from apps.api.aiopt_web.providers import OpenAIAdapter,ProviderError
 
@@ -19,9 +19,11 @@ def clean(monkeypatch):
 @pytest.fixture
 def client():
     with TestClient(app) as value:yield value
-def login(client,name):
-    client.post("/api/v1/auth/register",json={"display_name":name,"username":name,"email":f"{name}@example.com","password":PASSWORD,"confirm_password":PASSWORD});client.post("/api/v1/auth/login",json={"identity":name,"password":PASSWORD});return {"X-CSRF-Token":client.cookies.get(CSRF_COOKIE)}
-def visible_models(_self,_key):return [{"id":"gpt-test","created":1_700_000_000,"owned_by":"openai"}]
+def login(client,name,role="ADMIN"):
+    client.post("/api/v1/auth/register",json={"display_name":name,"username":name,"email":f"{name}@example.com","password":PASSWORD,"confirm_password":PASSWORD})
+    with SessionLocal() as db:user=db.scalar(select(User).where(User.username==name));user.role=role;db.commit()
+    client.post("/api/v1/auth/login",json={"identity":name,"password":PASSWORD});return {"X-CSRF-Token":client.cookies.get(CSRF_COOKIE)}
+def visible_models(_self,_key):return ([{"id":"gpt-test","created":1_700_000_000,"owned_by":"openai"}],12.5)
 
 def test_encryption_is_authenticated_versioned_and_requires_master_key(monkeypatch):
     encrypted=encrypt_credential(KEY,"owner","openai");assert KEY not in encrypted;assert decrypt_credential(encrypted,"owner","openai")==KEY
@@ -38,6 +40,19 @@ def test_connect_validate_models_isolation_redaction_and_disconnect(client,monke
     client.cookies.clear();headers=login(client,"owner");assert client.delete("/api/v1/providers/openai",headers=headers).json()["revocation_required"] is True
     with SessionLocal() as db:assert db.scalar(select(ProviderCredential)) is None
     assert KEY not in caplog.text
+
+def test_provider_controls_are_admin_only_and_public_payload_is_sanitized(client,monkeypatch):
+    monkeypatch.setattr(OpenAIAdapter,"_models",visible_models);analyst=login(client,"analyst","ANALYST")
+    assert client.get("/api/v1/providers").status_code==403
+    assert client.post("/api/v1/providers/openai/connect",headers=analyst,json={"credential":KEY}).status_code==403
+    client.cookies.clear();headers=login(client,"admin");assert client.post("/api/v1/providers/openai/connect",headers=headers,json={"credential":KEY}).status_code==200
+    assert client.get("/api/v1/providers/openai/models").status_code==200
+    payload=client.get("/api/telemetry").json();assert payload["status"]=="AVAILABLE";assert payload["usage_available"] is False;assert KEY not in str(payload);assert "masked_identifier" not in payload
+
+def test_encrypted_connection_persists_across_database_sessions(client,monkeypatch):
+    monkeypatch.setattr(OpenAIAdapter,"_models",visible_models);headers=login(client,"restartadmin");client.post("/api/v1/providers/openai/connect",headers=headers,json={"credential":KEY})
+    with SessionLocal() as first:credential_id=first.scalar(select(ProviderCredential)).id
+    with SessionLocal() as restarted:row=restarted.get(ProviderCredential,credential_id);assert decrypt_credential(row.encrypted_credential,row.user_id,row.provider)==KEY;assert row.last_successful_connection_at is not None
 
 def test_invalid_provider_credential_fails_safely_without_storage(client,monkeypatch):
     def invalid(*_):raise ProviderError("OpenAI rejected this credential.","INVALID")

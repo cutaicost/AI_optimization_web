@@ -2,6 +2,7 @@
 from abc import ABC,abstractmethod
 from dataclasses import asdict,dataclass
 from datetime import datetime,timezone
+from time import monotonic
 import httpx
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class OpenAIAdapter(ProviderAdapter):
     identifier="openai";base_url="https://api.openai.com/v1"
     capabilities=ProviderCapabilities(credential_validation=True,model_discovery=True)
     def _models(self,credential):
+        started=monotonic()
         try:
             response=httpx.get(f"{self.base_url}/models",headers={"Authorization":f"Bearer {credential}"},timeout=10)
         except httpx.TimeoutException as error:raise ProviderError("OpenAI validation timed out. Try again.","TIMEOUT") from error
@@ -36,13 +38,14 @@ class OpenAIAdapter(ProviderAdapter):
         if response.status_code==429:raise ProviderError("OpenAI rate limited credential validation. Try again later.","RATE_LIMITED")
         if response.status_code>=500:raise ProviderError("OpenAI is currently unavailable. Try again.","UNAVAILABLE")
         if response.status_code!=200:raise ProviderError("OpenAI credential validation failed.","ERROR")
-        try:return response.json().get("data",[])
+        try:return response.json().get("data",[]),round((monotonic()-started)*1000,2)
         except (ValueError,AttributeError) as error:raise ProviderError("OpenAI returned an invalid validation response.","ERROR") from error
     def validate_credentials(self,credential):
-        models=self._models(credential);return {"status":"CONNECTED","models_visible":len(models)}
+        models,latency=self._models(credential);return {"status":"CONNECTED","models_visible":len(models),"latency_ms":latency}
     def get_available_models(self,credential):
         result=[]
-        for item in self._models(credential):
+        models,_latency=self._models(credential)
+        for item in models:
             created=item.get("created");result.append(ProviderModelInfo(id=str(item.get("id",""))[:160],owned_by=str(item.get("owned_by"))[:120] if item.get("owned_by") else None,created_at=datetime.fromtimestamp(created,tz=timezone.utc) if isinstance(created,(int,float)) else None))
         return [item for item in result if item.id]
 

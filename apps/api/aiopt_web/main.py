@@ -20,7 +20,7 @@ from .product import router as product_router
 from .advanced import router as advanced_router
 from .oidc import router as oidc_router
 from .enterprise import router as enterprise_router
-from .provider_api import router as provider_api_router
+from .provider_api import public_router as provider_public_router,router as provider_api_router
 from .cost_engine import CostCalculator
 from .import_storage import get_import_storage
 from .telemetry_import import cleanup_stale_files
@@ -56,6 +56,7 @@ app.include_router(advanced_router)
 app.include_router(oidc_router)
 app.include_router(enterprise_router)
 app.include_router(provider_api_router)
+app.include_router(provider_public_router)
 app.add_middleware(CORSMiddleware,allow_origins=list(cfg.allowed_origins),allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE"],allow_headers=["Content-Type","X-CSRF-Token"])
 
 @app.middleware("http")
