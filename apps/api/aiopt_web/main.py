@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import monotonic
-import json,secrets
+import json,secrets,logging
 import os,threading,time
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +25,7 @@ from .cost_engine import CostCalculator
 from .import_storage import get_import_storage
 from .telemetry_import import cleanup_stale_files
 
-STARTED=monotonic();cfg=settings()
+STARTED=monotonic();cfg=settings();logger=logging.getLogger("aiopt.import")
 def aware(value):return value.replace(tzinfo=timezone.utc) if value and value.tzinfo is None else value
 
 @asynccontextmanager
@@ -41,10 +41,16 @@ async def lifespan(_):
     stop=threading.Event();thread=None
     if cfg.environment=="test" or os.getenv("EMBEDDED_IMPORT_WORKER")=="true":
         from .worker import process_next,recover_stale_jobs
-        recover_stale_jobs()
+        recovered=recover_stale_jobs();logger.info("import startup recovery complete recovered=%s",recovered)
         def work():
             while not stop.is_set():
-                if process_next("embedded-worker") is None:stop.wait(.05)
+                try:
+                    if process_next("embedded-worker") is None:stop.wait(.05)
+                except Exception:
+                    logger.exception("embedded import worker iteration failed")
+                    try:recover_stale_jobs()
+                    except Exception:logger.exception("embedded import worker recovery failed")
+                    stop.wait(1)
         thread=threading.Thread(target=work,daemon=True);thread.start()
     yield
     stop.set()
@@ -155,12 +161,16 @@ def ingest(payload:EventIn,user:User=Depends(require_analyst),db:Session=Depends
 @app.delete("/api/v1/telemetry",dependencies=[Depends(require_csrf)])
 def clear_telemetry(user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     jobs=db.scalars(select(ImportJob).where(ImportJob.user_id==user.id)).all()
+    if any(job.status in {"CREATED","UPLOADED","ANALYZING","READY","QUEUED","PREPARING","IMPORTING","CANCELLING"} for job in jobs):raise HTTPException(409,"Telemetry cannot be cleared while an import is active")
     count=db.execute(delete(TelemetryEvent).where(TelemetryEvent.user_id==user.id)).rowcount
-    db.execute(delete(ImportJob).where(ImportJob.user_id==user.id));audit(db,"telemetry.cleared",actor=user.id,resource_type="telemetry",records=count,imports=len(jobs));db.commit()
+    from .models import ForecastRun
+    forecasts=db.execute(delete(ForecastRun).where(ForecastRun.user_id==user.id)).rowcount
+    db.execute(delete(ImportJob).where(ImportJob.user_id==user.id));audit(db,"telemetry.cleared",actor=user.id,resource_type="telemetry",records=count,imports=len(jobs),forecasts=forecasts);db.commit()
     for job in jobs:
         try:get_import_storage().delete(job.storage_id)
         except OSError:pass
-    return {"deleted":count,"imports_deleted":len(jobs)}
+    logger.info("telemetry cleared user_id=%s records=%s imports=%s forecasts=%s",user.id,count,len(jobs),forecasts)
+    return {"deleted":count,"imports_deleted":len(jobs),"forecasts_deleted":forecasts}
 
 @app.get("/api/v1/admin/summary")
 def admin_summary(_:User=Depends(require_admin),db:Session=Depends(db_session)):

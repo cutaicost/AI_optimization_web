@@ -7,7 +7,9 @@ RUN npm ci && npm run build
 FROM python:3.11.13-slim-bookworm AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    APP_ENV=production
+    APP_ENV=production \
+    EMBEDDED_IMPORT_WORKER=true \
+    IMPORT_STORAGE_ROOT=/var/lib/aiopt/imports
 WORKDIR /app
 COPY apps/api/requirements.production.txt ./apps/api/requirements.production.txt
 RUN pip install --no-cache-dir -r apps/api/requirements.production.txt \

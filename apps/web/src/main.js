@@ -134,7 +134,7 @@ async function adminDashboard() {
       ['Audit events', data.audit_events],
     ]
       .map(([l, v]) => `<article><span>${l}</span><strong>${number(v)}</strong></article>`)
-      .join('')}</section><section class="panel form-panel"><h2>AI Providers</h2><h3>OpenAI</h3><p><span class="badge">${esc(openai?.status || 'NOT_CONNECTED')}</span>${openai?.masked_identifier ? ` Credential ${esc(openai.masked_identifier)}` : ' No credential stored'}</p>${openai ? `<p>Last successful connection: ${openai.last_successful_connection_at ? new Date(openai.last_successful_connection_at).toLocaleString() : 'Never'}<br>Last telemetry refresh: ${openai.last_telemetry_refresh_at ? new Date(openai.last_telemetry_refresh_at).toLocaleString() : 'Never'}${openai.last_latency_ms === null ? '' : `<br>Connection latency: ${number(openai.last_latency_ms)} ms`}</p><button class="button" data-provider-validate>Test Connection</button> <button class="button" data-provider-models>Refresh Models</button> <button class="button" data-provider-disconnect>Remove</button>` : ''}<form id="openaiConnect"><label>${openai ? 'Replace API Key' : 'OpenAI API Key'}<input name="credential" type="password" autocomplete="off" required></label><button class="button primary">${openai ? 'Replace API Key' : 'Connect OpenAI'}</button></form><p class="help">The key is encrypted server-side and never returned to this browser. Billing usage requires a separate OpenAI organization Admin API key and is not collected here.</p><div id="providerModels"></div><p id="providerStatus" role="status"></p></section><section class="panel admin-links"><a href="/admin/users" data-route>Manage users</a><a href="/admin/audit" data-route>Review audit log</a><a href="/admin/system" data-route>System diagnostics</a></section>`,
+      .join('')}</section><section class="panel form-panel"><h2>AI Providers</h2><h3>OpenAI</h3><p><span class="badge">${esc(openai?.status || 'NOT_CONNECTED')}</span>${openai?.masked_identifier ? ` Credential ${esc(openai.masked_identifier)}` : ' No credential stored'}</p>${openai ? `<p>Last successful connection: ${openai.last_successful_connection_at ? new Date(openai.last_successful_connection_at).toLocaleString() : 'Never'}<br>Last telemetry refresh: ${openai.last_telemetry_refresh_at ? new Date(openai.last_telemetry_refresh_at).toLocaleString() : 'Never'}${openai.last_latency_ms === null ? '' : `<br>Connection latency: ${number(openai.last_latency_ms)} ms`}</p><button class="button" data-provider-validate>Test Connection</button> <button class="button" data-provider-models>Refresh Models</button> <button class="button" data-provider-disconnect>Remove</button>` : ''}<form id="openaiConnect"><label>${openai ? 'Replace API Key' : 'OpenAI API Key'}<input name="credential" type="password" autocomplete="off" required></label><button class="button primary">${openai ? 'Replace API Key' : 'Connect OpenAI'}</button></form><p class="help">The key is encrypted server-side and never returned to this browser. Billing usage requires a separate OpenAI organization Admin API key and is not collected here.</p><div id="providerModels"></div><p id="providerStatus" role="status"></p></section><section class="panel form-panel"><h2>Telemetry data</h2><p>Clear imported telemetry, import history, and derived forecasts while preserving users and configuration.</p><button class="button" type="button" data-reset>Clear Telemetry Data</button><p id="resetStatus" role="status"></p></section><dialog id="clearTelemetryDialog"><h2>Clear telemetry data?</h2><p>This will permanently delete imported telemetry and derived telemetry records. Application settings, users, integrations, budgets, and configuration will not be removed.</p><button class="button" type="button" data-clear-cancel>Cancel</button> <button class="button" type="button" data-clear-confirm>Clear Telemetry</button></dialog><section class="panel admin-links"><a href="/admin/users" data-route>Manage users</a><a href="/admin/audit" data-route>Review audit log</a><a href="/admin/system" data-route>System diagnostics</a></section>`,
     true,
   );
 }
@@ -215,7 +215,9 @@ function wire() {
     currentUser = null;
     navigate('/');
   });
-  document.querySelector('[data-reset]')?.addEventListener('click', resetTelemetry);
+  document.querySelector('[data-reset]')?.addEventListener('click',()=>document.querySelector('#clearTelemetryDialog')?.showModal());
+  document.querySelector('[data-clear-cancel]')?.addEventListener('click',()=>document.querySelector('#clearTelemetryDialog')?.close());
+  document.querySelector('[data-clear-confirm]')?.addEventListener('click',resetTelemetry);
   document.querySelector('#profileForm')?.addEventListener('submit', profileSubmit);
   document.querySelector('#passwordForm')?.addEventListener('submit', passwordSubmit);
   document.querySelector('#importForm')?.addEventListener('submit', importSubmit);
@@ -317,11 +319,11 @@ async function updateUser(id, change) {
   }
 }
 async function resetTelemetry() {
-  if (!confirm('Clear your telemetry and import history? This cannot be undone.')) return;
   const status = document.querySelector('#resetStatus');
   try {
     const result = await api('/telemetry', { method: 'DELETE' });
-    status.textContent = `Cleared ${number(result.deleted)} telemetry rows.`;
+    document.querySelector('#clearTelemetryDialog')?.close();
+    status.textContent = `Cleared ${number(result.deleted)} telemetry rows and ${number(result.imports_deleted)} import records.`;
   } catch (error) {
     status.textContent = error.message;
   }

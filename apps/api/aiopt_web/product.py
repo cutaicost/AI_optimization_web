@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 from secrets import token_hex
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import delete, func, select
@@ -12,6 +13,7 @@ from .import_storage import get_import_storage
 from .telemetry_import import MAX_ACTIVE_IMPORTS,MAX_FILE_SIZE,ImportFailure,auto_mapping,delimiter,encoding,map_row,rows,validate_filename
 
 router=APIRouter(prefix="/api/v1")
+logger=logging.getLogger("aiopt.import.api")
 
 def owned_job(db,user,import_id):
     job=db.scalar(select(ImportJob).where(ImportJob.id==import_id,ImportJob.user_id==user.id))
@@ -27,19 +29,21 @@ def unlink(job):
 
 @router.post("/import/start",status_code=201,dependencies=[Depends(require_csrf)])
 def start_import(payload:ImportStartIn,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
+    logger.info("import request received user_id=%s filename=%s bytes=%s",user.id,Path(payload.filename).name,payload.file_size)
     try:validate_filename(payload.filename,payload.format)
     except ImportFailure as error:raise HTTPException(400,str(error))
     active=db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.user_id==user.id,ImportJob.status.in_(["CREATED","UPLOADED","ANALYZING","READY","IMPORTING"]))) or 0
     if active>=MAX_ACTIVE_IMPORTS:raise HTTPException(429,"Too many active imports")
     job=ImportJob(user_id=user.id,filename=Path(payload.filename).name,file_size=payload.file_size,file_format=payload.format,storage_id=token_hex(24))
     db.add(job);db.flush();audit(db,"import.started",actor=user.id,resource_type="import",resource_id=job.id,filename=job.filename,file_size=job.file_size);db.commit()
-    return {"import":job_json(job)}
+    logger.info("import job created job_id=%s",job.id);return {"import":job_json(job)}
 
 @router.post("/import/{import_id}/upload",dependencies=[Depends(require_csrf)])
 async def upload_import(import_id:str,file:UploadFile=File(...),user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     job=owned_job(db,user,import_id)
     if job.status!="CREATED":raise HTTPException(409,"This import has already been uploaded")
     storage=get_import_storage();received=0
+    logger.info("import upload started job_id=%s storage_created=true",job.id)
     try:
         with storage.open_writer(job.storage_id) as handle:
             while chunk:=await file.read(1_000_000):
@@ -48,11 +52,12 @@ async def upload_import(import_id:str,file:UploadFile=File(...),user:User=Depend
                 handle.write(chunk)
         if received!=job.file_size:raise ImportFailure("Upload is incomplete")
     except (ImportFailure,OSError) as error:
+        logger.warning("import upload failed job_id=%s reason=%s",job.id,type(error).__name__)
         try:storage.delete(job.storage_id)
         except OSError:pass
         raise HTTPException(400,str(error))
     finally:await file.close()
-    job.status="UPLOADED";db.commit();return {"import":job_json(job)}
+    job.status="UPLOADED";db.commit();logger.info("import upload completed job_id=%s bytes=%s",job.id,received);return {"import":job_json(job)}
 
 @router.post("/import/{import_id}/analyze",dependencies=[Depends(require_csrf)])
 def analyze_import(import_id:str,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
@@ -73,6 +78,7 @@ def analyze_import(import_id:str,user:User=Depends(require_analyst),db:Session=D
         job.detected_encoding=enc;job.detected_delimiter=sep;job.rows_total=total;job.sample_rows=sample;job.mapping=auto_mapping(headers);job.status="READY";db.commit()
         return {"import":job_json(job),"columns":headers,"suggested_mapping":job.mapping}
     except Exception as error:
+        logger.exception("import analysis failed job_id=%s",job.id)
         db.rollback();job=owned_job(db,user,import_id);job.status="FAILED";job.failure_reason=str(error)[:500];job.completed_at=utcnow();audit(db,"import.failed",outcome="failure",actor=user.id,resource_type="import",resource_id=job.id,reason=job.failure_reason);db.commit();unlink(job)
         raise HTTPException(400,"The file could not be analyzed")
 
@@ -84,14 +90,14 @@ def commit_import(import_id:str,payload:ImportCommitIn,user:User=Depends(require
     job=owned_job(db,user,import_id)
     if job.status!="READY":raise HTTPException(409,"Import is not ready to commit")
     if not {"application","provider","model"}.issubset(set(payload.mapping.values())):raise HTTPException(422,"Mapping must include application, provider, and model")
-    job.status="QUEUED";job.mapping=payload.mapping;job.failure_reason=None;audit(db,"import.queued",actor=user.id,resource_type="import",resource_id=job.id);db.commit();return {"import":job_json(job)}
+    job.status="QUEUED";job.mapping=payload.mapping;job.failure_reason=None;audit(db,"import.queued",actor=user.id,resource_type="import",resource_id=job.id);db.commit();logger.info("import processing scheduled job_id=%s",job.id);return {"import":job_json(job)}
 
 @router.post("/import/{import_id}/cancel",dependencies=[Depends(require_csrf)])
 def cancel_import(import_id:str,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
     job=owned_job(db,user,import_id)
     if job.status in {"COMPLETED","FAILED","CANCELLED"}:raise HTTPException(409,"Import can no longer be cancelled")
     if job.status in {"PREPARING","IMPORTING"}:
-        get_import_storage().request_cancellation(job.storage_id);job.status="CANCELLING";payload=job_json(job);db.rollback();return {"import":payload}
+        get_import_storage().request_cancellation(job.storage_id);job.status="CANCELLING";db.commit();logger.info("import cancellation requested job_id=%s",job.id);return {"import":job_json(job)}
     else:job.status="CANCELLED";job.completed_at=utcnow();unlink(job);audit(db,"import.cancelled",actor=user.id,resource_type="import",resource_id=job.id)
     db.commit();return {"import":job_json(job)}
 

@@ -62,8 +62,12 @@ def test_false_completed_prevention_and_rejected_rows(client):
 def test_cancel_and_owner_scoped_reset(client):
     signup(client,"first");import_id=start(client);assert client.post(f"/api/v1/import/{import_id}/cancel",headers=csrf(client)).status_code==200
     second=start(client);analyzed=upload_analyze(client,second);client.post(f"/api/v1/import/{second}/commit",headers=csrf(client),json={"mapping":analyzed["suggested_mapping"]});wait_status(client,second,"COMPLETED")
-    response=client.delete("/api/v1/telemetry",headers=csrf(client));assert response.json()=={"deleted":2,"imports_deleted":2}
+    response=client.delete("/api/v1/telemetry",headers=csrf(client));assert response.json()=={"deleted":2,"imports_deleted":2,"forecasts_deleted":0}
     assert client.get("/api/v1/import/history").json()["items"]==[]
+
+def test_clear_is_blocked_while_import_is_active(client):
+    signup(client,"active");start(client)
+    response=client.delete("/api/v1/telemetry",headers=csrf(client));assert response.status_code==409;assert "import is active" in response.json()["detail"]
 
 def test_rejects_oversize_traversal_duplicate_and_incomplete_upload(client):
     signup(client,"first")
