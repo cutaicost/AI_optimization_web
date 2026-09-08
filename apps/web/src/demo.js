@@ -7,8 +7,13 @@ const csrf = () => document.cookie.split('; ').find((row) => row.startsWith('aio
 if (location.pathname === '/register') history.replaceState({}, '', '/demo#access');
 
 function protectPublicSurface() {
-  document.querySelectorAll('a[href="/register"]').forEach((link) => { link.setAttribute('href', '/demo#access'); link.textContent = 'Request Access'; });
-  document.querySelectorAll('a[href="/demo"]').forEach((link) => { if (!link.classList.contains('brand')) link.textContent = 'Book a Demo'; });
+  document.querySelectorAll('a[href="/register"]').forEach((link) => {
+    link.setAttribute('href', '/demo#access');
+    if (link.textContent !== 'Request Access') link.textContent = 'Request Access';
+  });
+  document.querySelectorAll('a[href="/demo"]').forEach((link) => {
+    if (!link.classList.contains('brand') && link.textContent !== 'Book a Demo') link.textContent = 'Book a Demo';
+  });
   const showcase = document.querySelector('.demo-showcase');
   if (showcase && !showcase.dataset.privateDemoCopy) {
     showcase.dataset.privateDemoCopy = 'true';
