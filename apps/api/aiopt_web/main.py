@@ -37,6 +37,8 @@ async def lifespan(_):
     cleanup_stale_files()
     with SessionLocal() as db:
         bootstrap_admins(db)
+        from .capability_evidence_seed import seed_capability_evidence
+        seed_capability_evidence(db);db.commit()
         cutoff=utcnow()-timedelta(hours=24)
         stale=db.scalars(select(ImportJob).where(ImportJob.status.in_(["CREATED","UPLOADED","ANALYZING","READY","IMPORTING"]),ImportJob.updated_at<cutoff)).all()
         for job in stale:job.status="FAILED";job.failure_reason="Import expired after 24 hours";job.completed_at=utcnow()

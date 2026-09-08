@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from .auth import audit,require_admin,require_csrf,require_operational_user
 from .database import db_session
-from .models import PriceOverride,PricingCatalogModel,PricingRecord,PricingRefresh,ProviderCredential,User
+from .models import ModelCapabilityEvidence,ModelSkill,PriceOverride,PricingCatalogModel,PricingRecord,PricingRefresh,ProviderCredential,User
 from .provider_credentials import CredentialConfigurationError,decrypt_credential
 from .providers import ProviderError,provider_adapter
 from .pricing_catalog import ALIASES,CATALOG,CURRENT,REVIEWED_AT,canonical,category,lifecycle,source
@@ -19,6 +19,15 @@ from .security import utcnow
 router=APIRouter(prefix="/api/v1/admin/pricing");public_router=APIRouter(prefix="/api/v1/pricing")
 SOURCE="https://developers.openai.com/api/docs/models/compare";MODEL_SOURCE="https://api.openai.com/v1/models"
 SOURCE_LABEL="OpenAI Official Pricing Documentation";STALE_AFTER_DAYS=180
+def capability_admin_data(db):
+    profiles=capability_profiles(db);skills={x.id:x.name for x in db.scalars(select(ModelSkill)).all()}
+    evidence=db.scalars(select(ModelCapabilityEvidence).order_by(ModelCapabilityEvidence.provider,ModelCapabilityEvidence.model_id,ModelCapabilityEvidence.evaluation_name)).all()
+    keys={(x.provider,x.model) for x in CATALOG_ENTRIES}|{(x[0],x[1]) for x in CATALOG}|{(x.provider,x.model_id) for x in db.scalars(select(PricingCatalogModel)).all()}
+    models=[]
+    for provider,model in sorted(keys):
+        profile=profile_for(db,provider,model,profiles);models.append({"provider":provider,"model":model,"rating_type":profile["rating_type"],"needs_review":profile["needs_review"],"inherited_from":profile["inherited_from"],"skills":profile["skills"],"pricing_verified":next((x.pricing_available for x in CATALOG_ENTRIES if x.provider==provider and x.model==model),False)})
+    rows=[{"provider":x.provider,"model":x.model_id,"skill":skills.get(x.skill_id,"Unknown"),"benchmark":x.evaluation_name,"raw_score":x.raw_score,"evaluation_max":x.evaluation_max,"source_url":x.source_url,"evaluation_date":x.evaluation_date,"confidence":x.confidence,"provider_reported":x.provider_reported,"independent":x.independent} for x in evidence]
+    return {"models":models,"evidence":rows,"counts":{"VERIFIED":sum(x["rating_type"]=="VERIFIED" for x in models),"BENCHMARK-INFORMED":sum(x["rating_type"]=="BENCHMARK-INFORMED" for x in models),"ESTIMATED":sum(x["rating_type"]=="ESTIMATED" for x in models),"needs_review":sum(x["needs_review"] for x in models),"evidence_records":len(rows)}}
 @public_router.get("/demo")
 def demo_catalog():
     selected={("anthropic","claude-sonnet-5"),("google","gemini-3.8-flash"),("xai","grok-4.6"),("mistral","mistral-medium-3-5"),("deepseek","deepseek-v4-pro"),("cohere","command-a-03-2025"),("perplexity","sonar-pro")}
@@ -92,7 +101,7 @@ def history(user:User=Depends(require_admin),db:Session=Depends(db_session)):
     providers=[{"provider":"openai","credential_status":connections["openai"].validation_status if "openai" in connections else "NOT_CONFIGURED","masked_identifier":connections["openai"].masked_identifier if "openai" in connections else None,"model_catalog_source":"AUTHENTICATED_PROVIDER_API","pricing_source_type":"MANUAL_MAINTAINED_CATALOG","pricing_source":SOURCE,"pricing_source_label":SOURCE_LABEL,"last_pricing_review":REVIEWED_AT,"last_model_discovery":last_discovery,"stale_after_days":STALE_AFTER_DAYS}]
     for provider_id in sorted({x.provider for x in CATALOG_ENTRIES}-{ "openai" }):
         entries=[x for x in CATALOG_ENTRIES if x.provider==provider_id];providers.append({"provider":provider_id,"credential_status":"CATALOG_ONLY","masked_identifier":None,"model_catalog_source":"MANUAL_VERIFIED_OFFICIAL_DOCUMENTATION","pricing_source_type":"MANUAL_MAINTAINED_CATALOG","pricing_source":entries[0].source,"pricing_source_label":f"{provider_id.title()} official pricing documentation","last_pricing_review":VERIFIED_AT,"last_model_discovery":None,"stale_after_days":STALE_AFTER_DAYS,"models":len(entries),"priced_models":sum(x.pricing_available for x in entries)})
-    return {"last_successful_refresh":next((x.created_at for x in rows if x.success),None),"providers":providers,"items":[{"timestamp":x.created_at,"provider":x.provider,"provider_credential_id":x.provider_credential_id,"models_retrieved":x.models_retrieved,"prices_retrieved":x.prices_retrieved,"models_changed":x.models_changed,"models_added":x.models_added,"success":x.success,"source_type":x.source_type,"validation_errors":x.validation_errors} for x in rows]}
+    return {"last_successful_refresh":next((x.created_at for x in rows if x.success),None),"providers":providers,"items":[{"timestamp":x.created_at,"provider":x.provider,"provider_credential_id":x.provider_credential_id,"models_retrieved":x.models_retrieved,"prices_retrieved":x.prices_retrieved,"models_changed":x.models_changed,"models_added":x.models_added,"success":x.success,"source_type":x.source_type,"validation_errors":x.validation_errors} for x in rows],"capabilities":capability_admin_data(db)}
 
 @router.post("/refresh",dependencies=[Depends(require_csrf)])
 def refresh(payload:RefreshIn,user:User=Depends(require_admin),db:Session=Depends(db_session)):
