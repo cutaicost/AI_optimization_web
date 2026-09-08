@@ -80,7 +80,7 @@ def test_signed_in_pricing_catalog_unknown_override_filters_and_sort(client):
     owner,_headers=login(client,"priceviewer")
     with SessionLocal() as db:
         db.add(PricingCatalogModel(provider="openai",model_id="unknown-model",display_name="Unknown Model",catalog_source_reference="provider",retrieved_at=datetime.now(timezone.utc)));db.add(PriceOverride(user_id=owner,provider="openai",model="gpt-5.6-luna",input_price=0.1,output_price=0.5));db.commit()
-    data=client.get("/api/v1/pricing?sort=input").json();by_model={x["model"]:x for x in data["items"]};assert by_model["unknown-model"]["status"]=="UNKNOWN";assert by_model["unknown-model"]["input_price_per_1m"] is None;assert by_model["gpt-5.6-luna"]["status"]=="MANUAL_OVERRIDE";assert by_model["gpt-5.6-luna"]["input_price_per_1m"]==.1
+    data=client.get("/api/v1/pricing?sort=input").json();by_model={x["model"]:x for x in data["items"]};assert data["categories"]==["TEXT_REASONING"];assert by_model["unknown-model"]["status"]=="UNKNOWN";assert by_model["unknown-model"]["pricing_category"]=="UNKNOWN";assert by_model["unknown-model"]["input_price_per_1m"] is None;assert by_model["gpt-5.6-luna"]["status"]=="MANUAL_OVERRIDE";assert by_model["gpt-5.6-luna"]["pricing_category"]=="TEXT_REASONING";assert by_model["gpt-5.6-luna"]["input_price_per_1m"]==.1
     assert [x["model"] for x in client.get("/api/v1/pricing?missing=true").json()["items"]]==["unknown-model"]
 
 def test_revoked_admin_key_leaves_previous_catalog_intact(client,monkeypatch):
