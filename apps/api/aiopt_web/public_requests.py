@@ -7,7 +7,7 @@ does not collide with the in-progress tenant ownership migration.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,21 +18,23 @@ from .models import AuditEvent, User
 router = APIRouter(prefix="/api/v1/public")
 admin_router = APIRouter(prefix="/api/v1/platform/request-tickets")
 
-TICKET_STATUSES = {"NEW", "CONTACTED", "QUALIFIED", "SCHEDULED", "COMPLETED", "APPROVED", "DENIED", "CLOSED"}
+TICKET_STATUSES = {"NEW", "CONTACTED", "IN_DISCUSSION", "QUALIFIED", "SCHEDULED", "COMPLETED", "APPROVED", "DECLINED", "DENIED", "CLOSED"}
+REQUEST_TYPES = {"SIGNUP_REQUEST", "CONSULTATION_REQUEST", "DEMO", "ACCESS"}
 
 
 class PublicRequestIn(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    request_type: str = Field(pattern=r"^(DEMO|ACCESS)$")
+    request_type: str = Field(pattern=r"^(SIGNUP_REQUEST|CONSULTATION_REQUEST|DEMO|ACCESS)$")
     name: str = Field(min_length=1, max_length=100)
     email: EmailStr
     company: str | None = Field(None, max_length=120)
     company_size: str | None = Field(None, max_length=80)
     role: str | None = Field(None, max_length=120)
+    phone: str | None = Field(None, max_length=40)
     ai_spend_range: str | None = Field(None, max_length=80)
     preferred_contact: str | None = Field(None, max_length=80)
     providers: str | None = Field(None, max_length=300)
-    goals: str = Field(min_length=1, max_length=1500)
+    goals: str | None = Field(None, max_length=1500)
     message: str | None = Field(None, max_length=2000)
     website: str | None = Field(None, max_length=200)
 
@@ -41,10 +43,16 @@ class PublicRequestIn(BaseModel):
     def normalize_email(cls, value):
         return str(value).casefold()
 
+    @model_validator(mode="after")
+    def required_request_identity(self):
+        if not self.company:
+            raise ValueError("Company / Organization is required")
+        return self
+
 
 class TicketUpdateIn(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    status: str = Field(pattern=r"^(NEW|CONTACTED|QUALIFIED|SCHEDULED|COMPLETED|APPROVED|DENIED|CLOSED)$")
+    status: str = Field(pattern=r"^(NEW|CONTACTED|IN_DISCUSSION|QUALIFIED|SCHEDULED|COMPLETED|APPROVED|DECLINED|DENIED|CLOSED)$")
     admin_notes: str | None = Field(None, max_length=3000)
 
 
@@ -57,13 +65,14 @@ def _ticket(row: AuditEvent) -> dict:
     return {
         "id": row.id,
         "ticket_number": data.get("ticket_number") or _ticket_number(row),
-        "request_type": data.get("request_type", "DEMO" if row.action == "public.demo_requested" else "ACCESS"),
+        "request_type": data.get("request_type", "CONSULTATION_REQUEST" if row.action == "public.demo_requested" else "SIGNUP_REQUEST"),
         "status": data.get("status", "NEW"),
         "name": data.get("name"),
         "email": data.get("email"),
         "company": data.get("company"),
         "company_size": data.get("company_size"),
         "role": data.get("role"),
+        "phone": data.get("phone"),
         "ai_spend_range": data.get("ai_spend_range"),
         "preferred_contact": data.get("preferred_contact", "Email"),
         "providers": data.get("providers"),
@@ -81,7 +90,7 @@ def _request_rows(db: Session):
         select(AuditEvent)
         .where(
             AuditEvent.resource_type == "public_request",
-            AuditEvent.action.in_(["public.demo_requested", "public.access_requested"]),
+            AuditEvent.action.in_(["public.demo_requested", "public.access_requested", "public.consultation_requested", "public.signup_requested"]),
         )
         .order_by(AuditEvent.timestamp.desc())
         .limit(500)
@@ -94,18 +103,20 @@ def create_public_request(payload: PublicRequestIn, request: Request, db: Sessio
         return {"accepted": True}
     host = request.client.host if request.client else "unknown"
     enforce_rate_limit(db, "public_access_request", host, 8, 60)
+    canonical_type="CONSULTATION_REQUEST" if payload.request_type in {"CONSULTATION_REQUEST","DEMO"} else "SIGNUP_REQUEST"
     row = AuditEvent(
-        action="public.demo_requested" if payload.request_type == "DEMO" else "public.access_requested",
+        action="public.demo_requested" if payload.request_type=="DEMO" else "public.access_requested" if payload.request_type=="ACCESS" else "public.consultation_requested" if canonical_type=="CONSULTATION_REQUEST" else "public.signup_requested",
         outcome="success",
         resource_type="public_request",
         metadata_json={
-            "request_type": payload.request_type,
+            "request_type": canonical_type,
             "status": "NEW",
             "name": payload.name,
             "email": payload.email,
             "company": payload.company,
             "company_size": payload.company_size,
             "role": payload.role,
+            "phone": payload.phone,
             "ai_spend_range": payload.ai_spend_range,
             "preferred_contact": payload.preferred_contact or "Email",
             "providers": payload.providers,
@@ -129,20 +140,21 @@ def list_request_tickets(
 ):
     if status and status not in TICKET_STATUSES:
         raise HTTPException(400, "Invalid ticket status")
-    if request_type and request_type not in {"DEMO", "ACCESS"}:
+    if request_type and request_type not in REQUEST_TYPES:
         raise HTTPException(400, "Invalid request type")
     items = [_ticket(row) for row in _request_rows(db)]
     if status:
         items = [item for item in items if item["status"] == status]
     if request_type:
-        items = [item for item in items if item["request_type"] == request_type]
+        requested="CONSULTATION_REQUEST" if request_type=="DEMO" else "SIGNUP_REQUEST" if request_type=="ACCESS" else request_type
+        items = [item for item in items if item["request_type"] == requested]
     return {"items": items, "new_count": sum(item["status"] == "NEW" for item in items), "total": len(items)}
 
 
 @admin_router.get("/{ticket_id}")
 def get_request_ticket(ticket_id: str, _: User = Depends(require_platform_admin), db: Session = Depends(db_session)):
     row = db.get(AuditEvent, ticket_id)
-    if not row or row.resource_type != "public_request" or row.action not in {"public.demo_requested", "public.access_requested"}:
+    if not row or row.resource_type != "public_request" or row.action not in {"public.demo_requested", "public.access_requested", "public.consultation_requested", "public.signup_requested"}:
         raise HTTPException(404, "Request ticket not found")
     return {"ticket": _ticket(row)}
 
@@ -155,7 +167,7 @@ def update_request_ticket(
     db: Session = Depends(db_session),
 ):
     row = db.get(AuditEvent, ticket_id)
-    if not row or row.resource_type != "public_request" or row.action not in {"public.demo_requested", "public.access_requested"}:
+    if not row or row.resource_type != "public_request" or row.action not in {"public.demo_requested", "public.access_requested", "public.consultation_requested", "public.signup_requested"}:
         raise HTTPException(404, "Request ticket not found")
     metadata = dict(row.metadata_json or {})
     previous_status = metadata.get("status", "NEW")

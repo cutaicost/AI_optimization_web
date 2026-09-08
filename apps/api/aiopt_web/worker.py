@@ -103,12 +103,15 @@ def _cleanup(job):
 def process_next(executor_id=None):
     executor_id=executor_id or f"worker-{os.getpid()}";job_id=claim_next(executor_id);return execute(job_id,executor_id) if job_id else None
 def run_forever(poll_seconds=1):
-    worker=f"worker-{os.getpid()}";last_recovery=0
+    worker=f"worker-{os.getpid()}";last_recovery=last_model_refresh_check=0
     try:
         while True:
             try:
                 if not last_recovery:register_worker(worker)
                 if time.monotonic()-last_recovery>=HEARTBEAT_SECONDS:recover_stale_jobs();last_recovery=time.monotonic()
+                if time.monotonic()-last_model_refresh_check>=60:
+                    from .pricing_api import run_scheduled_refresh_if_due
+                    run_scheduled_refresh_if_due();last_model_refresh_check=time.monotonic()
                 result=process_next(worker)
                 if result is None:heartbeat(worker,"IDLE");time.sleep(poll_seconds)
             except SQLAlchemyError:

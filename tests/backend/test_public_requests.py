@@ -55,3 +55,15 @@ def test_demo_admin_api_requires_platform_admin_and_supports_completed(client):
     updated = client.patch(f"/api/v1/platform/request-tickets/{ticket['id']}", headers={"X-CSRF-Token": client.cookies.get(CSRF_COOKIE)}, json={"status": "COMPLETED", "admin_notes": "Demo delivered."})
     assert updated.status_code == 200
     assert updated.json()["ticket"]["status"] == "COMPLETED"
+
+
+def test_signup_and_consultation_are_distinct_private_tickets(client):
+    base={"name":"Jane Smith","email":"jane@example.com","company":"Acme Corp"}
+    signup=client.post("/api/v1/public/requests",json=base|{"request_type":"SIGNUP_REQUEST","goals":"Request access"})
+    consultation=client.post("/api/v1/public/requests",json=base|{"request_type":"CONSULTATION_REQUEST","goals":"Review costs"})
+    assert signup.status_code==202 and consultation.status_code==202
+    with SessionLocal() as db:
+        assert db.scalar(select(func.count()).select_from(User))==2
+        types={row.metadata_json["request_type"] for row in db.scalars(select(AuditEvent).where(AuditEvent.resource_type=="public_request"))}
+        assert types=={"SIGNUP_REQUEST","CONSULTATION_REQUEST"}
+    assert client.get("/api/v1/platform/request-tickets").status_code==401

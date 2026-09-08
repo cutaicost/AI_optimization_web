@@ -19,6 +19,8 @@ class Settings:
     oidc_redirect_uri: str
     oidc_role_claim: str
     oidc_role_map: dict[str,str]
+    model_refresh_enabled: bool
+    model_refresh_hour: int
 
 def settings() -> Settings:
     environment = os.getenv("APP_ENV", "development").lower()
@@ -37,4 +39,6 @@ def settings() -> Settings:
     role_map={}
     for pair in os.getenv("OIDC_ROLE_MAP","viewer=VIEWER,analyst=ANALYST,administrator=ADMIN").split(","):
         if "=" in pair:key,value=pair.split("=",1);role_map[key.strip()]=value.strip().upper()
-    return Settings(environment, database_url, secret, origins, int(os.getenv("SESSION_TTL_SECONDS", "28800")), os.getenv("COOKIE_SECURE", "false").lower() == "true" or environment == "production",os.getenv("OIDC_ISSUER","").rstrip("/"),os.getenv("OIDC_CLIENT_ID",""),os.getenv("OIDC_CLIENT_SECRET",""),os.getenv("OIDC_REDIRECT_URI","http://127.0.0.1:8000/api/v1/auth/oidc/callback"),os.getenv("OIDC_ROLE_CLAIM","roles"),role_map)
+    refresh_hour=int(os.getenv("MODEL_REFRESH_HOUR","6"))
+    if not 0<=refresh_hour<=23:raise RuntimeError("MODEL_REFRESH_HOUR must be between 0 and 23")
+    return Settings(environment, database_url, secret, origins, int(os.getenv("SESSION_TTL_SECONDS", "28800")), os.getenv("COOKIE_SECURE", "false").lower() == "true" or environment == "production",os.getenv("OIDC_ISSUER","").rstrip("/"),os.getenv("OIDC_CLIENT_ID",""),os.getenv("OIDC_CLIENT_SECRET",""),os.getenv("OIDC_REDIRECT_URI","http://127.0.0.1:8000/api/v1/auth/oidc/callback"),os.getenv("OIDC_ROLE_CLAIM","roles"),role_map,os.getenv("MODEL_REFRESH_ENABLED","true").lower()=="true",refresh_hour)
