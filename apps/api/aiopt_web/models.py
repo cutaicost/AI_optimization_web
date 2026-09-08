@@ -23,6 +23,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
 class Session(Base):
     __tablename__ = "sessions"
@@ -33,6 +34,8 @@ class Session(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    client_summary: Mapped[str | None] = mapped_column(String(160), nullable=True)
     user: Mapped[User] = relationship()
 
 class OidcIdentity(Base):
@@ -127,6 +130,34 @@ class AuditEvent(Base):
     resource_type: Mapped[str] = mapped_column(String(60))
     resource_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    organization_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+
+class Organization(Base):
+    __tablename__="organizations"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier)
+    name:Mapped[str]=mapped_column(String(120));slug:Mapped[str]=mapped_column(String(140),unique=True,index=True)
+    status:Mapped[str]=mapped_column(String(20),default="ACTIVE",index=True);plan_id:Mapped[str]=mapped_column(String(40),default="FREE")
+    plan_status:Mapped[str]=mapped_column(String(20),default="ACTIVE");created_by:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="RESTRICT"),index=True)
+    settings:Mapped[dict]=mapped_column(JSON,default=dict);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);updated_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now,onupdate=now)
+
+class OrganizationMember(Base):
+    __tablename__="organization_members"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);organization_id:Mapped[str]=mapped_column(ForeignKey("organizations.id",ondelete="CASCADE"),index=True);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True)
+    role:Mapped[str]=mapped_column(String(20),default="VIEWER",index=True);status:Mapped[str]=mapped_column(String(20),default="ACTIVE",index=True);joined_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);last_active_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True)
+    __table_args__=(UniqueConstraint("organization_id","user_id",name="uq_organization_member"),)
+
+class OrganizationInvitation(Base):
+    __tablename__="organization_invitations"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);organization_id:Mapped[str]=mapped_column(ForeignKey("organizations.id",ondelete="CASCADE"),index=True);email:Mapped[str]=mapped_column(String(320),index=True);role:Mapped[str]=mapped_column(String(20));invited_by:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="RESTRICT"));created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);expires_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),index=True);accepted_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True);revoked_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True);last_sent_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+
+class NotificationPreference(Base):
+    __tablename__="notification_preferences"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);organization_id:Mapped[str]=mapped_column(ForeignKey("organizations.id",ondelete="CASCADE"),index=True);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);preferences:Mapped[dict]=mapped_column(JSON,default=dict);updated_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now,onupdate=now)
+    __table_args__=(UniqueConstraint("organization_id","user_id",name="uq_notification_preference"),)
+
+class FeatureFlag(Base):
+    __tablename__="feature_flags"
+    key:Mapped[str]=mapped_column(String(80),primary_key=True);state:Mapped[str]=mapped_column(String(20),default="OFF");description:Mapped[str]=mapped_column(String(300),default="");updated_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now,onupdate=now);updated_by:Mapped[str|None]=mapped_column(String(36),nullable=True)
 
 class LoginAttempt(Base):
     __tablename__ = "login_attempts"

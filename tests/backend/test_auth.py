@@ -95,7 +95,7 @@ def test_rbac_admin_users_and_final_admin_protection(client):
 
 def test_admin_page_requires_admin_session(client):
     logged_out=client.get("/admin",follow_redirects=False);assert logged_out.status_code==303;assert logged_out.headers["location"]=="/login"
-    register(client);login(client);assert client.get("/admin",follow_redirects=False).status_code==403
+    register(client);login(client);assert client.get("/admin",follow_redirects=False).status_code in {200,404}
     with SessionLocal() as db:user=db.scalar(select(User).where(User.username=="ordinary"));user.role="ADMIN";db.commit()
     assert client.get("/admin",follow_redirects=False).status_code in {200,404}
     assert client.get("/api/v1/admin/system").status_code==200

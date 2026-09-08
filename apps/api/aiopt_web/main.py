@@ -10,10 +10,10 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import case, delete, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from .auth import CSRF_COOKIE,SESSION_COOKIE,audit,bootstrap_admins,create_session,current_session,enforce_rate_limit,login_limited,public_user,require_admin,require_analyst,require_csrf,require_operational_user,require_user
+from .auth import CSRF_COOKIE,SESSION_COOKIE,audit,bootstrap_admins,create_session,current_session,enforce_rate_limit,login_limited,public_user,public_user_context,require_admin,require_analyst,require_csrf,require_operational_user,require_user
 from .config import VERSION,settings
 from .database import Base,SessionLocal,db_session,engine
-from .models import AuditEvent,ImportJob,LoginAttempt,Session as UserSession,TelemetryEvent,User,WorkerInstance
+from .models import AuditEvent,ImportJob,LoginAttempt,Organization,OrganizationMember,Session as UserSession,TelemetryEvent,User,WorkerInstance
 from .schemas import AdminUserUpdateIn,EventIn,LoginIn,PasswordChangeIn,ProfileIn,RegisterIn
 from .security import hash_password,utcnow,verify_password
 from .product import router as product_router
@@ -23,6 +23,7 @@ from .enterprise import router as enterprise_router
 from .provider_api import public_router as provider_public_router,router as provider_api_router
 from .live_api import router as live_router
 from .pricing_api import public_router as pricing_public_router,router as pricing_router
+from .control_plane import platform_router,router as control_plane_router
 from .cost_engine import CostCalculator
 from .import_storage import get_import_storage
 from .telemetry_import import cleanup_stale_files
@@ -68,6 +69,8 @@ app.include_router(provider_public_router)
 app.include_router(live_router)
 app.include_router(pricing_router)
 app.include_router(pricing_public_router)
+app.include_router(control_plane_router)
+app.include_router(platform_router)
 app.add_middleware(CORSMiddleware,allow_origins=list(cfg.allowed_origins),allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE"],allow_headers=["Content-Type","X-CSRF-Token"])
 
 @app.middleware("http")
@@ -102,12 +105,13 @@ def register(payload:RegisterIn,request:Request,db:Session=Depends(db_session)):
     if db.scalar(select(User.id).where(or_(func.lower(User.username)==username,func.lower(User.email)==email))):raise HTTPException(409,"An account with those details already exists")
     user=User(username=payload.username,email=email,display_name=payload.display_name,password_hash=hash_password(payload.password),role="ANALYST",organization=payload.organization,job_title=payload.job_title)
     db.add(user)
-    try:db.flush();audit(db,"account.registered",actor=user.id,resource_type="user",resource_id=user.id);db.commit()
+    try:
+        db.flush();org=Organization(name=(payload.organization or f"{payload.display_name}'s Organization")[:120],slug=f"org-{user.id.casefold()}",created_by=user.id);db.add(org);db.flush();db.add(OrganizationMember(organization_id=org.id,user_id=user.id,role="OWNER"));audit(db,"account.registered",actor=user.id,resource_type="user",resource_id=user.id,organization_id=org.id);db.commit()
     except IntegrityError:db.rollback();raise HTTPException(409,"An account with those details already exists")
     return {"user":public_user(user)}
 
 @app.post("/api/v1/auth/login")
-def login(payload:LoginIn,response:Response,db:Session=Depends(db_session)):
+def login(payload:LoginIn,response:Response,request:Request,db:Session=Depends(db_session)):
     limited,key=login_limited(db,payload.identity)
     if limited:raise HTTPException(429,"Sign-in temporarily unavailable. Try again later")
     user=db.scalar(select(User).where(or_(func.lower(User.username)==payload.identity.casefold(),func.lower(User.email)==payload.identity.casefold())))
@@ -117,9 +121,9 @@ def login(payload:LoginIn,response:Response,db:Session=Depends(db_session)):
         audit(db,"authentication.login",outcome="failure");db.commit();raise HTTPException(401,"Invalid username or password")
     if not user.is_active:
         audit(db,"authentication.login",outcome="disabled",actor=user.id);db.commit();raise HTTPException(403,"This account is disabled")
-    db.execute(delete(UserSession).where(UserSession.user_id==user.id,UserSession.revoked_at.is_(None)))
-    raw,csrf=create_session(db,user);user.last_login_at=utcnow();audit(db,"authentication.login",actor=user.id);db.commit();set_session_cookies(response,raw,csrf)
-    return {"user":public_user(user),"redirect_to":"/app/profile" if user.must_change_password else "/admin" if user.role=="ADMIN" else "/app/overview"}
+    agent=request.headers.get("user-agent","");summary="Mobile browser" if any(x in agent.casefold() for x in ("mobile","iphone","android")) else "Browser session"
+    raw,csrf=create_session(db,user,summary);user.last_login_at=utcnow();audit(db,"authentication.login",actor=user.id);db.commit();set_session_cookies(response,raw,csrf)
+    exposed=public_user_context(db,user);return {"user":exposed,"redirect_to":"/app/profile" if user.must_change_password else "/admin" if user.role=="ADMIN" else "/app/overview"}
 
 @app.post("/api/v1/auth/logout",dependencies=[Depends(require_csrf)])
 def logout(request:Request,response:Response,db:Session=Depends(db_session)):
@@ -128,7 +132,7 @@ def logout(request:Request,response:Response,db:Session=Depends(db_session)):
     response.delete_cookie(SESSION_COOKIE,path="/");response.delete_cookie(CSRF_COOKIE,path="/");return {"logged_out":True}
 
 @app.get("/api/v1/auth/me")
-def me(user:User=Depends(require_user)):return {"user":public_user(user)}
+def me(user:User=Depends(require_user),db:Session=Depends(db_session)):return {"user":public_user_context(db,user)}
 
 @app.post("/api/v1/auth/change-password",dependencies=[Depends(require_csrf)])
 def change_password(payload:PasswordChangeIn,user:User=Depends(require_user),db:Session=Depends(db_session)):
@@ -250,7 +254,8 @@ def frontend_admin(request:Request,admin_path:str="",db:Session=Depends(db_sessi
     session=current_session(request,db)
     if not session:return RedirectResponse("/login",status_code=303)
     if session.user.must_change_password:return RedirectResponse("/app/profile",status_code=303)
-    if session.user.role!="ADMIN":return JSONResponse({"detail":"Administrator access required"},status_code=403)
+    member=db.scalar(select(OrganizationMember).where(OrganizationMember.user_id==session.user.id,OrganizationMember.status=="ACTIVE",OrganizationMember.role.in_(["OWNER","ADMIN"])))
+    if session.user.role!="ADMIN" and not member:return JSONResponse({"detail":"Administrator access required"},status_code=403)
     index=DIST_ROOT/"index.html"
     if index.is_file():return FileResponse(index)
     return JSONResponse({"detail":"Frontend build is unavailable"},status_code=404)

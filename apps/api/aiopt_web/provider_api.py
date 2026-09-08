@@ -10,8 +10,9 @@ from .models import LiveTelemetrySession,PricingRecord,ProviderCredential,Provid
 from .provider_credentials import CredentialConfigurationError,decrypt_credential,encrypt_credential
 from .providers import ProviderError,provider_adapter
 from .security import utcnow
+from .entitlements import require_permission
 
-router=APIRouter(prefix="/api/v1/providers");public_router=APIRouter()
+router=APIRouter(prefix="/api/v1/providers",dependencies=[Depends(require_permission("providers.manage"))]);public_router=APIRouter()
 class ConnectIn(BaseModel):model_config=ConfigDict(extra="forbid");credential:SecretStr
 def owned(db,user,provider):return db.scalar(select(ProviderCredential).where(ProviderCredential.user_id==user.id,ProviderCredential.provider==provider))
 def safe(row):
