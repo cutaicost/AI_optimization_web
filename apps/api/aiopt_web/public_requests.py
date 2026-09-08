@@ -18,7 +18,7 @@ from .models import AuditEvent, User
 router = APIRouter(prefix="/api/v1/public")
 admin_router = APIRouter(prefix="/api/v1/platform/request-tickets")
 
-TICKET_STATUSES = {"NEW", "CONTACTED", "QUALIFIED", "SCHEDULED", "APPROVED", "DENIED", "CLOSED"}
+TICKET_STATUSES = {"NEW", "CONTACTED", "QUALIFIED", "SCHEDULED", "COMPLETED", "APPROVED", "DENIED", "CLOSED"}
 
 
 class PublicRequestIn(BaseModel):
@@ -27,11 +27,13 @@ class PublicRequestIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     email: EmailStr
     company: str | None = Field(None, max_length=120)
+    company_size: str | None = Field(None, max_length=80)
     role: str | None = Field(None, max_length=120)
     ai_spend_range: str | None = Field(None, max_length=80)
     preferred_contact: str | None = Field(None, max_length=80)
     providers: str | None = Field(None, max_length=300)
     goals: str = Field(min_length=1, max_length=1500)
+    message: str | None = Field(None, max_length=2000)
     website: str | None = Field(None, max_length=200)
 
     @field_validator("email")
@@ -42,7 +44,7 @@ class PublicRequestIn(BaseModel):
 
 class TicketUpdateIn(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    status: str = Field(pattern=r"^(NEW|CONTACTED|QUALIFIED|SCHEDULED|APPROVED|DENIED|CLOSED)$")
+    status: str = Field(pattern=r"^(NEW|CONTACTED|QUALIFIED|SCHEDULED|COMPLETED|APPROVED|DENIED|CLOSED)$")
     admin_notes: str | None = Field(None, max_length=3000)
 
 
@@ -60,11 +62,13 @@ def _ticket(row: AuditEvent) -> dict:
         "name": data.get("name"),
         "email": data.get("email"),
         "company": data.get("company"),
+        "company_size": data.get("company_size"),
         "role": data.get("role"),
         "ai_spend_range": data.get("ai_spend_range"),
         "preferred_contact": data.get("preferred_contact", "Email"),
         "providers": data.get("providers"),
         "goals": data.get("goals"),
+        "message": data.get("message"),
         "admin_notes": data.get("admin_notes"),
         "created_at": row.timestamp,
         "updated_at": data.get("updated_at") or row.timestamp,
@@ -100,11 +104,13 @@ def create_public_request(payload: PublicRequestIn, request: Request, db: Sessio
             "name": payload.name,
             "email": payload.email,
             "company": payload.company,
+            "company_size": payload.company_size,
             "role": payload.role,
             "ai_spend_range": payload.ai_spend_range,
             "preferred_contact": payload.preferred_contact or "Email",
             "providers": payload.providers,
             "goals": payload.goals,
+            "message": payload.message,
         },
     )
     db.add(row)
@@ -126,12 +132,11 @@ def list_request_tickets(
     if request_type and request_type not in {"DEMO", "ACCESS"}:
         raise HTTPException(400, "Invalid request type")
     items = [_ticket(row) for row in _request_rows(db)]
-    new_count = sum(item["status"] == "NEW" for item in items)
     if status:
         items = [item for item in items if item["status"] == status]
     if request_type:
         items = [item for item in items if item["request_type"] == request_type]
-    return {"items": items, "new_count": new_count, "total": len(_request_rows(db))}
+    return {"items": items, "new_count": sum(item["status"] == "NEW" for item in items), "total": len(items)}
 
 
 @admin_router.get("/{ticket_id}")

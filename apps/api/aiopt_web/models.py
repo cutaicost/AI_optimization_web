@@ -260,3 +260,29 @@ class PricingCatalogModel(Base):
     lifecycle_status:Mapped[str]=mapped_column(String(30),default="UNKNOWN",index=True)
     canonical_pricing_model:Mapped[str|None]=mapped_column(String(160),nullable=True)
     __table_args__=(UniqueConstraint("provider","model_id",name="uq_pricing_catalog_provider_model"),)
+
+class ModelSkill(Base):
+    __tablename__="model_skills"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier)
+    key:Mapped[str]=mapped_column(String(80),unique=True,index=True)
+    name:Mapped[str]=mapped_column(String(120))
+    description:Mapped[str|None]=mapped_column(String(500),nullable=True)
+
+class ModelCapabilityEvidence(Base):
+    __tablename__="model_capability_evidence"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier)
+    provider:Mapped[str]=mapped_column(String(80),index=True)
+    model_id:Mapped[str]=mapped_column(String(160),index=True)
+    skill_id:Mapped[str]=mapped_column(ForeignKey("model_skills.id",ondelete="CASCADE"),index=True)
+    evaluation_name:Mapped[str]=mapped_column(String(200))
+    raw_score:Mapped[float|None]=mapped_column(Float,nullable=True)
+    evaluation_max:Mapped[float|None]=mapped_column(Float,nullable=True)
+    benchmark_weight:Mapped[float]=mapped_column(Float,default=1.0)
+    source_type:Mapped[str]=mapped_column(String(40),default="PROVIDER_BENCHMARK")
+    source_url:Mapped[str]=mapped_column(String(1000))
+    provider_reported:Mapped[bool]=mapped_column(Boolean,default=True)
+    independent:Mapped[bool]=mapped_column(Boolean,default=False)
+    evaluation_date:Mapped[datetime]=mapped_column(DateTime(timezone=True))
+    confidence:Mapped[str]=mapped_column(String(20),default="LOW")
+    created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+    __table_args__=(UniqueConstraint("provider","model_id","skill_id","evaluation_name","source_url",name="uq_model_capability_evidence"),)

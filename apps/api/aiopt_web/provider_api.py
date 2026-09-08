@@ -1,7 +1,7 @@
 """Admin-controlled provider credentials, sanitized public telemetry, and public access intake."""
 from dataclasses import asdict
 from fastapi import APIRouter,Depends,HTTPException,Request
-from pydantic import BaseModel,ConfigDict,EmailStr,Field,SecretStr,field_validator
+from pydantic import BaseModel,ConfigDict,SecretStr
 from sqlalchemy import delete,select
 from sqlalchemy.orm import Session
 from .auth import audit,enforce_rate_limit,require_operational_user,require_csrf
@@ -14,21 +14,6 @@ from .entitlements import require_permission
 
 router=APIRouter(prefix="/api/v1/providers",dependencies=[Depends(require_permission("providers.manage"))]);public_router=APIRouter()
 class ConnectIn(BaseModel):model_config=ConfigDict(extra="forbid");credential:SecretStr
-class PublicRequestIn(BaseModel):
-    model_config=ConfigDict(extra="forbid",str_strip_whitespace=True)
-    request_type:str=Field(pattern=r"^(DEMO|ACCESS)$")
-    name:str=Field(min_length=1,max_length=100)
-    email:EmailStr
-    company:str|None=Field(None,max_length=120)
-    role:str|None=Field(None,max_length=120)
-    ai_spend_range:str|None=Field(None,max_length=80)
-    preferred_contact:str|None=Field(None,max_length=80)
-    providers:str|None=Field(None,max_length=300)
-    goals:str=Field(min_length=1,max_length=1500)
-    website:str|None=Field(None,max_length=200)
-    @field_validator("email")
-    @classmethod
-    def normalize_email(cls,value):return str(value).casefold()
 def owned(db,user,provider):return db.scalar(select(ProviderCredential).where(ProviderCredential.user_id==user.id,ProviderCredential.provider==provider))
 def safe(row):
     adapter=provider_adapter(row.provider)
@@ -84,12 +69,3 @@ def disconnect(provider:str,user:User=Depends(require_operational_user),db:Sessi
 def public_telemetry(db:Session=Depends(db_session)):
     connection=db.scalar(select(ProviderCredential).where(ProviderCredential.provider=="openai",ProviderCredential.validation_status=="CONNECTED").order_by(ProviderCredential.last_successful_connection_at.desc()).limit(1));available=set(db.scalars(select(ProviderModel.model_id).where(ProviderModel.provider=="openai")).all());prices=db.scalars(select(PricingRecord).where(PricingRecord.provider=="openai",PricingRecord.effective_to.is_(None)).order_by(PricingRecord.model)).all()
     return {"provider":"openai","status":"AVAILABLE" if connection else "NOT_CONNECTED","source":"LIVE_CONNECTION" if connection else "CATALOG","last_refreshed_at":connection.last_telemetry_refresh_at if connection else None,"latency_ms":connection.last_latency_ms if connection else None,"usage_available":False,"models":[{"id":x.model,"availability":"AVAILABLE" if x.model in available else "UNKNOWN","pricing":{"unit":x.pricing_unit,"input":float(x.input_price),"output":float(x.output_price),"cached_input":float(x.cached_input_price) if x.cached_input_price is not None else None,"currency":x.currency,"source":x.provenance,"last_verified_at":x.last_verified_at}} for x in prices]}
-
-@public_router.post("/api/v1/public/requests",status_code=202)
-def public_request(payload:PublicRequestIn,request:Request,db:Session=Depends(db_session)):
-    # Honeypot submissions intentionally receive the same generic response.
-    if payload.website:return {"accepted":True}
-    host=request.client.host if request.client else "unknown"
-    enforce_rate_limit(db,"public_access_request",host,8,60)
-    audit(db,"public.request_received",resource_type="public_request",resource_id=payload.request_type.lower(),request_type=payload.request_type,name=payload.name,email=str(payload.email),company=payload.company,role=payload.role,ai_spend_range=payload.ai_spend_range,preferred_contact=payload.preferred_contact,providers=payload.providers,goals=payload.goals,status="NEW")
-    db.commit();return {"accepted":True}

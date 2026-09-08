@@ -13,6 +13,7 @@ from .provider_credentials import CredentialConfigurationError,decrypt_credentia
 from .providers import ProviderError,provider_adapter
 from .pricing_catalog import ALIASES,CATALOG,CURRENT,REVIEWED_AT,canonical,category,lifecycle,source
 from .multi_provider_catalog import BY_KEY,CATALOG_ENTRIES,VERIFIED_AT,Workload,calculate_entry,comparable_models
+from .capability_scoring import capability_profiles,profile_for
 from .security import utcnow
 
 router=APIRouter(prefix="/api/v1/admin/pricing");public_router=APIRouter(prefix="/api/v1/pricing")
@@ -132,4 +133,6 @@ def catalog(q:str="",provider:str|None=None,sort:str=Query("name",pattern="^(nam
         override=overrides.get((entry.provider,entry.model));unknown=not entry.pricing_available and not override
         if missing!=unknown and missing:continue
         public=entry.public();items.append({"provider":entry.provider,"model":entry.model,"display_name":entry.display_name,"availability":"AVAILABLE","lifecycle":"CURRENT","pricing_category":"TEXT_REASONING","canonical_pricing_model":None,"input_price_per_1m":override.input_price if override else public["input"],"cached_input_price_per_1m":None if override else public["cached_input"],"output_price_per_1m":override.output_price if override else public["output"],"currency":"USD","status":"MANUAL_OVERRIDE" if override else "CURRENT" if entry.pricing_available else "UNKNOWN","base_status":"CURRENT" if entry.pricing_available else "UNKNOWN","manual_override_active":bool(override),"catalog_input_price_per_1m":public["input"],"catalog_output_price_per_1m":public["output"],"pricing_source":"MANUAL_OVERRIDE" if override else entry.source,"effective_at":VERIFIED_AT,"last_pricing_review":VERIFIED_AT,"stale_after_days":STALE_AFTER_DAYS,"retrieved_at":VERIFIED_AT,"catalog_source":"MANUAL_MAINTAINED_CATALOG","additional_dimensions":entry.rules,"model_family":entry.family,"capabilities":list(entry.capabilities),"quality_tier":entry.quality_tier,"context_window":entry.context_window,"max_output_tokens":entry.max_output_tokens,"model_creator":entry.model_creator,"hosting_provider":entry.hosting_provider,"deprecated":entry.deprecated,"preview":entry.preview,"pricing_available":entry.pricing_available})
+    profiles=capability_profiles(db)
+    for item in items:item["capability_profile"]=profile_for(db,item["provider"],item["model"],profiles)
     items.sort(key=(lambda x:(x["input_price_per_1m"] is None,x["input_price_per_1m"] or 0)) if sort=="input" else (lambda x:(x["output_price_per_1m"] is None,x["output_price_per_1m"] or 0)) if sort=="output" else lambda x:(x["provider"],x["model"]));return {"unit":"USD_PER_MILLION_TOKENS","items":items,"providers":sorted({x["provider"] for x in items}),"categories":sorted({x["pricing_category"] for x in items if x["pricing_category"] and x["pricing_category"]!="UNKNOWN"})}
