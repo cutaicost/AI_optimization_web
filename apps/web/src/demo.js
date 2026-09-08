@@ -2,13 +2,6 @@ import './request.css';
 
 const clean = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-// Public self-registration is intentionally gated. Preserve the legacy URL so
-// old links/bookmarks land on the access-request section instead of exposing
-// the account-creation form.
-if (location.pathname === '/register') {
-  history.replaceState({}, '', '/demo#access');
-}
-
 function protectPublicSurface() {
   document.querySelectorAll('a[href="/register"]').forEach((link) => {
     link.setAttribute('href', '/demo#access');
@@ -30,12 +23,9 @@ function protectPublicSurface() {
   }
 }
 
-// Main navigation is rendered dynamically, so keep public registration/demo
-// links truthful without coupling this access gate to the authenticated app.
 const publicObserver = new MutationObserver(protectPublicSurface);
 if (document.body) publicObserver.observe(document.body, { childList: true, subtree: true });
 
-// Capture legacy Create Profile links before main.js handles SPA navigation.
 document.addEventListener('click', (event) => {
   const link = event.target.closest('a[href="/register"], a[href="/demo#access"]');
   if (!link) return;
@@ -46,7 +36,6 @@ document.addEventListener('click', (event) => {
 }, true);
 
 const demoHeader = () => `<header class="demo-nav request-nav"><a href="/" data-route class="brand">CutAIcost</a><nav><a href="/" data-route>Back to Home</a><a href="/login" data-route>Sign In</a></nav></header>`;
-
 const field = (label, input) => `<label>${clean(label)}${input}</label>`;
 
 function requestForm(type) {
@@ -78,18 +67,8 @@ export function demoPage() {
       <div class="request-trust"><span>Private walkthrough</span><span>No public dashboard</span><span>Access by approval</span></div>
     </section>
     <section class="request-options" aria-label="Demo and access requests">
-      <article class="request-card" id="book-demo">
-        <p class="eyebrow">BOOK A DEMO</p>
-        <h2>Request a private demonstration</h2>
-        <p>Meet with us for a guided overview tailored to your organization. No customer credentials or production telemetry are required to request a meeting.</p>
-        ${requestForm('DEMO')}
-      </article>
-      <article class="request-card" id="access">
-        <p class="eyebrow">REQUEST ACCESS</p>
-        <h2>Interested in an account?</h2>
-        <p>Public self-registration is closed. Submit an access request and we will review it before account enrollment.</p>
-        ${requestForm('ACCESS')}
-      </article>
+      <article class="request-card" id="book-demo"><p class="eyebrow">BOOK A DEMO</p><h2>Request a private demonstration</h2><p>Meet with us for a guided overview tailored to your organization. No customer credentials or production telemetry are required to request a meeting.</p>${requestForm('DEMO')}</article>
+      <article class="request-card" id="access"><p class="eyebrow">REQUEST ACCESS</p><h2>Interested in an account?</h2><p>Public self-registration is closed. Submit an access request and we will review it before account enrollment.</p>${requestForm('ACCESS')}</article>
     </section>
     <section class="request-privacy"><strong>Private by design.</strong><span>Submitting this form does not connect an AI provider, upload telemetry, or grant access to the CutAIcost application.</span></section>
   </main>`;
@@ -106,12 +85,7 @@ async function submitRequest(event) {
   button.disabled = true;
   status.textContent = 'Sending request…';
   try {
-    const response = await fetch('/api/v1/public/requests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify(data),
-    });
+    const response = await fetch('/api/v1/public/requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(data) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       const detail = Array.isArray(payload.detail) ? payload.detail.map((item) => item.msg).join('. ') : payload.detail;
@@ -128,7 +102,5 @@ async function submitRequest(event) {
 export function wireDemo() {
   protectPublicSurface();
   document.querySelectorAll('[data-public-request]').forEach((form) => form.addEventListener('submit', submitRequest));
-  if (location.hash === '#access') {
-    requestAnimationFrame(() => document.querySelector('#access')?.scrollIntoView({ block: 'start' }));
-  }
+  if (location.hash === '#access') requestAnimationFrame(() => document.querySelector('#access')?.scrollIntoView({ block: 'start' }));
 }
