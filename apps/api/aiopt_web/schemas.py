@@ -17,7 +17,7 @@ class RegisterIn(StrictModel):
     def passwords_match(self):
         if self.password!=self.confirm_password: raise ValueError("Passwords do not match")
         if not any(c.islower() for c in self.password) or not any(c.isupper() for c in self.password) or not any(c.isdigit() for c in self.password): raise ValueError("Password must contain upper-case, lower-case, and numeric characters")
-        return self
+        raise ValueError("Public registration is closed. Request access to create an account")
 
 class LoginIn(StrictModel): identity:str=Field(min_length=1,max_length=320);password:str=Field(min_length=1,max_length=128)
 class PasswordChangeIn(StrictModel):
