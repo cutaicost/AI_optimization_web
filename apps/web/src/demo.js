@@ -1,31 +1,134 @@
-const cash=value=>Number(value??0).toLocaleString(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0});
-const clean=value=>String(value??'Unknown').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const company={name:'Northstar Analytics',requests:'4.8M',models:7,spend:18420,optimized:13760,latency:842};
-const opportunities=[
- ['model','MODEL SELECTION',1840,'Premium models handle low-complexity extraction.','Route validated request classes to a candidate model.','Subject to configured quality requirements.','High-confidence candidate; requires workload evaluation.'],
- ['cache','CACHED INPUT',920,'Cached-input utilization is 31%.','Target 54% for eligible repeated context.','Prompt semantics and freshness must remain unchanged.','Validate cache eligibility and retention behavior.'],
- ['routing','ROUTING',1260,'Three request classes use a single route.','Apply policy-based quality-constrained routing.','Escalate when confidence thresholds are not met.','Shadow-test before rollout.'],
- ['efficiency','WORKLOAD EFFICIENCY',640,'Retries and long responses repeat work.','Tighten response limits and retry policies.','Preserve completeness and reliability targets.','Requires workload validation.'],
-];
-const events=[['Claims summary','Anthropic · Claude Sonnet 5','38/s','920','164','420 ms','$0.0035','OK'],['Document routing','Google · Gemini 3.8 Flash','54/s','380','72','205 ms','$0.0006','OK'],['Portfolio assistant','Mistral · Mistral Medium 3.5','21/s','1,260','310','690 ms','$0.0042','OK'],['Report synthesis','OpenAI · GPT-6 Astra','12/s','1,880','620','1,210 ms','$0.0508','RETRY']];
-let playback=null,prices=[];
-const signal=name=>window.dispatchEvent(new CustomEvent('cutai:analytics',{detail:{name,source:'public_demo'}}));
-const cards=values=>`<section class="demo-metrics">${values.map(([label,value,note])=>`<article><span>${clean(label)}</span><strong>${clean(value)}</strong>${note?`<small>${clean(note)}</small>`:''}</article>`).join('')}</section>`;
-const demoHeader=()=>`<header class="demo-nav"><a href="/" data-route class="brand">CutAIcost</a><nav><a href="/" data-route>Back to Home</a><a href="/login" data-route>Sign In</a></nav></header>`;
-export function demoPage(){return `${demoHeader()}<main id="main" class="demo-shell"><header class="demo-hero"><div><p class="eyebrow">DEMO ENVIRONMENT · SIMULATED WORKLOAD</p><h1>CutAIcost Interactive Demo</h1><p>See how CutAIcost analyzes AI usage, cost, performance, and optimization opportunities.</p><div class="demo-trust"><span>Simulated data</span><span>No customer information</span><span>No API key required</span></div></div><button class="button primary" data-demo-analyze>Analyze Workload</button></header><section id="demoInitial" class="demo-initial"><div><p class="eyebrow">SIMULATED DATA</p><h2>${company.name}</h2><p>30-Day AI Workload</p></div>${cards([['Requests',company.requests],['Models','7'],['Current spend','$18,420'],['Average latency','842 ms','Simulated']])}</section><section id="demoAnalysis" class="demo-analysis" hidden aria-live="polite"><div class="analysis-track"><span></span></div><p data-analysis-stage>Preparing simulated workload…</p></section><div id="demoResults" hidden>${results()}</div></main>`}
-function results(){return `<section class="demo-result"><p class="eyebrow">SIMULATED DEMO RESULTS</p>${cards([['Current monthly spend','$18,420'],['Optimized scenario','$13,760'],['Identified opportunity','$4,660 / month'],['Potential annual opportunity','$55,920']])}<p class="demo-disclaimer">Actual results depend on customer workloads, pricing, quality requirements, and usage patterns. Opportunities are not guaranteed savings.</p></section>${comparison()}${opportunityView()}${explore()}${conversion()}<aside class="demo-sticky"><span>Ready to analyze your environment?</span><a href="/register" data-route class="button primary" data-demo-signup>Create Profile</a></aside>`}
-function comparison(){const rows=[['Monthly spend','$18,420','$13,760'],['Annualized spend','$221,040','$165,120'],['Cost / 1M requests','$3,838','$2,867'],['Average latency','842 ms','716 ms'],['Cached-input utilization','31%','54%'],['Models actively used','7','6'],['Optimization opportunities','—','4']];return `<section class="demo-section"><header class="section-head"><div><p class="eyebrow">QUALITY-CONSTRAINED OPTIMIZATION</p><h2>Current vs optimized scenario</h2></div><p>Observed simulated baseline compared with a modeled scenario.</p></header><div class="compare-table"><div class="compare-row compare-head"><span>Measure</span><span>Current baseline</span><span>Optimized scenario</span></div>${rows.map(row=>`<div class="compare-row">${row.map(x=>`<span>${x}</span>`).join('')}</div>`).join('')}</div></section>`}
-function opportunityView(){return `<section class="demo-section"><header class="section-head"><div><p class="eyebrow">WHY THIS OPPORTUNITY</p><h2>Four candidate improvements</h2></div><strong>$4,660 / month</strong></header><div class="opportunity-grid">${opportunities.map(item=>`<article><p class="eyebrow">${item[1]}</p><h3>${cash(item[2])}<small> / month</small></h3><p>${item[3]}</p><button class="text-button" data-opportunity="${item[0]}" aria-expanded="false">Inspect candidate</button><div data-opportunity-detail="${item[0]}" hidden><dl><dt>Current workload</dt><dd>${item[3]}</dd><dt>Candidate change</dt><dd>${item[4]}</dd><dt>Quality constraint</dt><dd>${item[5]}</dd><dt>Validation</dt><dd>${item[6]}</dd></dl></div></article>`).join('')}</div></section>`}
-function explore(){return `<section class="demo-section"><header class="section-head"><div><p class="eyebrow">DEMO MODE</p><h2>Explore CutAIcost</h2></div><p>Every view uses the same fictional workload.</p></header><div class="demo-tabs" role="tablist">${['Overview','Live Telemetry','Model Pricing','Optimization','Forecasting','Reports'].map((x,i)=>`<button role="tab" aria-selected="${i===0}" data-demo-tab="${x}">${x}</button>`).join('')}</div><section id="demoFeature" class="demo-feature">${overview()}</section></section>`}
-function overview(){return `${cards([['Spend','$18,420'],['Requests','4.8M'],['Tokens','9.6B'],['Models','7'],['Opportunity','$4,660'],['Forecast','$247K']])}<div class="demo-two"><article class="panel"><h3>Workload distribution</h3>${[['Customer support',34],['Document processing',27],['Analytics copilots',22],['Internal automation',17]].map(x=>`<p class="bar-label"><span>${x[0]}</span><strong>${x[1]}%</strong></p><div class="bar"><span style="width:${x[1]}%"></span></div>`).join('')}</article><article class="panel"><h3>Recent simulated telemetry</h3>${events.slice(0,3).map(x=>`<p class="event-row"><span>${x[0]}<small>${x[1]}</small></span><strong>${x[5]}</strong></p>`).join('')}</article></div>`}
-function live(){return `<p class="demo-label">SIMULATED LIVE TELEMETRY · NOT CONNECTED TO ANY PROVIDER</p>${cards([['Request rate','192/sec'],['Input tokens','4,920/sec'],['Output tokens','1,180/sec'],['Cached tokens','1,540/sec'],['Latency','842 ms'],['Errors','0.7%']])}<div class="panel table-wrap"><table><thead><tr><th>Workload</th><th>Provider · model</th><th>Rate</th><th>Input</th><th>Output</th><th>Latency</th><th>Cost</th><th>Status</th></tr></thead><tbody data-demo-live>${eventRows(events)}</tbody></table></div>`}
-const eventRows=rows=>rows.map(row=>`<tr>${row.map(value=>`<td>${clean(value)}</td>`).join('')}</tr>`).join('');
-function pricing(){const rows=prices.length?prices:[{provider:'Unknown',model:'Unknown model',input:null,cached_input:null,output:null,source:null}];return `<p class="demo-label">VERIFIED CATALOG PRICING · SIMULATED COMPARISON · QUALITY EQUIVALENCE IS NOT ASSUMED</p><div class="panel table-wrap"><table><thead><tr><th>Provider · model</th><th>Tier</th><th>Input / 1M</th><th>Cached / 1M</th><th>Output / 1M</th><th>Source</th></tr></thead><tbody>${rows.map(x=>`<tr><td><strong>${clean(x.provider)}</strong><br>${clean(x.display_name||x.model)}</td><td>${x.quality_tier?`Tier ${clean(x.quality_tier)}`:'—'}</td><td>${x.input==null?'—':cash(x.input)}</td><td>${x.cached_input==null?'—':cash(x.cached_input)}</td><td>${x.output==null?'—':cash(x.output)}</td><td>${x.source?`<a href="${clean(x.source)}" target="_blank" rel="noreferrer">Official documentation</a>`:'Pricing unavailable'}</td></tr>`).join('')}</tbody></table></div>`}
-function optimization(){return `<div class="opportunity-grid compact">${opportunities.map(x=>`<article><p class="eyebrow">${x[1]}</p><h3>${cash(x[2])} / month</h3><p>${x[4]}</p><p><strong>Quality constraint:</strong> ${x[5]}</p><small>${x[6]}</small></article>`).join('')}</div>`}
-function forecast(){const months=['Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep'];return `<p class="demo-label">SIMULATED FORECAST · DIRECTIONAL SCENARIO, NOT PREDICTIVE CERTAINTY</p><div class="forecast" aria-label="Twelve month spend forecast">${months.map((month,i)=>`<div><span class="forecast-current" style="height:${92+i*3}px"></span><span class="forecast-optimized" style="height:${69+i*2}px"></span><small>${month}</small></div>`).join('')}</div><p class="legend"><span>Current trajectory</span><span>Optimized scenario</span></p>`}
-function report(){signal('demo_report_viewed');return `<article class="demo-report"><p class="eyebrow">CUTAICOST · AI OPTIMIZATION ASSESSMENT</p><h2>${company.name}</h2><p>Simulated Demonstration</p>${cards([['Current monthly spend','$18,420'],['Potential optimized scenario','$13,760'],['Identified opportunity','$4,660/month'],['Potential annual opportunity','$55,920'],['Models analyzed','7'],['Opportunities','4']])}<p>Quality-constrained candidates require validation against workload, policy, and quality thresholds.</p></article>`}
-function conversion(){return `<section class="conversion-panel"><div><p class="eyebrow">MOVE FROM SIMULATION TO YOUR BASELINE</p><h2>See what CutAIcost finds in your AI environment.</h2><p>Create a profile to analyze your own telemetry, connect supported providers, establish a baseline, and identify optimization opportunities.</p></div><div class="conversion-actions"><a href="/register" data-route class="button primary" data-demo-signup>Create Free Profile</a><a href="/login" data-route class="button">Sign In</a><button class="button" data-demo-restart>Restart Demo</button></div></section>`}
-async function show(name){document.querySelectorAll('[data-demo-tab]').forEach(x=>x.setAttribute('aria-selected',String(x.dataset.demoTab===name)));if(name==='Model Pricing'&&!prices.length)try{const response=await fetch('/api/v1/pricing/demo');if(response.ok){const data=await response.json();prices=Array.isArray(data?.items)?data.items:[]}}catch{}const target=document.querySelector('#demoFeature');target.innerHTML=name==='Overview'?overview():name==='Live Telemetry'?live():name==='Model Pricing'?pricing():name==='Optimization'?optimization():name==='Forecasting'?forecast():report();if(name==='Live Telemetry')startPlayback();else stopDemo()}
-function startPlayback(){stopDemo();let i=0;playback=setInterval(()=>{const target=document.querySelector('[data-demo-live]');if(target){i=(i+1)%events.length;target.innerHTML=eventRows([...events.slice(i),...events.slice(0,i)])}},1200)}
-export function stopDemo(){if(playback){clearInterval(playback);playback=null}}
-export function wireDemo(){document.querySelector('[data-demo-analyze]')?.addEventListener('click',async event=>{event.currentTarget.disabled=true;signal('demo_started');document.querySelector('#demoInitial').hidden=true;const box=document.querySelector('#demoAnalysis'),stage=box.querySelector('p');box.hidden=false;const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;for(const text of ['Analyzing token distribution…','Comparing model costs…','Evaluating cached input…','Reviewing latency…','Identifying optimization opportunities…','Building forecast…']){stage.textContent=text;await new Promise(done=>setTimeout(done,reduced?0:400))}box.hidden=true;document.querySelector('#demoResults').hidden=false;signal('demo_completed');document.querySelector('.demo-result').scrollIntoView({behavior:reduced?'auto':'smooth'})});document.querySelectorAll('[data-opportunity]').forEach(button=>button.addEventListener('click',()=>{const detail=document.querySelector(`[data-opportunity-detail="${button.dataset.opportunity}"]`);detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));if(!detail.hidden)signal('opportunity_viewed')}));document.querySelectorAll('[data-demo-tab]').forEach(button=>button.addEventListener('click',()=>show(button.dataset.demoTab)));document.querySelectorAll('[data-demo-signup]').forEach(x=>x.addEventListener('click',()=>signal('signup_clicked_from_demo')));document.querySelector('[data-demo-restart]')?.addEventListener('click',()=>{stopDemo();prices=[];document.querySelector('#demoResults').hidden=true;document.querySelector('#demoInitial').hidden=false;const button=document.querySelector('[data-demo-analyze]');button.disabled=false;button.focus();scrollTo({top:0,behavior:'smooth'})})}
+import './request.css';
+
+const clean = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+// Public self-registration is intentionally gated. Preserve the legacy URL so
+// old links/bookmarks land on the access-request section instead of exposing
+// the account-creation form.
+if (location.pathname === '/register') {
+  history.replaceState({}, '', '/demo#access');
+}
+
+function protectPublicSurface() {
+  document.querySelectorAll('a[href="/register"]').forEach((link) => {
+    link.setAttribute('href', '/demo#access');
+    link.textContent = 'Request Access';
+  });
+  document.querySelectorAll('a[href="/demo"]').forEach((link) => {
+    if (!link.classList.contains('brand')) link.textContent = 'Book a Demo';
+  });
+  const showcase = document.querySelector('.demo-showcase');
+  if (showcase && !showcase.dataset.privateDemoCopy) {
+    showcase.dataset.privateDemoCopy = 'true';
+    const eyebrow = showcase.querySelector('.eyebrow');
+    const heading = showcase.querySelector('h2');
+    const paragraphs = showcase.querySelectorAll('p');
+    if (eyebrow) eyebrow.textContent = 'PRIVATE PRODUCT DEMONSTRATION';
+    if (heading) heading.textContent = 'See CutAIcost in a guided session.';
+    if (paragraphs[1]) paragraphs[1].textContent = 'Product demonstrations are available by request. The working dashboard and internal workflows are not exposed publicly.';
+    if (paragraphs[2]) paragraphs[2].textContent = 'Private walkthrough · Access by approval';
+  }
+}
+
+// Main navigation is rendered dynamically, so keep public registration/demo
+// links truthful without coupling this access gate to the authenticated app.
+const publicObserver = new MutationObserver(protectPublicSurface);
+if (document.body) publicObserver.observe(document.body, { childList: true, subtree: true });
+
+// Capture legacy Create Profile links before main.js handles SPA navigation.
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('a[href="/register"], a[href="/demo#access"]');
+  if (!link) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  history.pushState({}, '', '/demo#access');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}, true);
+
+const demoHeader = () => `<header class="demo-nav request-nav"><a href="/" data-route class="brand">CutAIcost</a><nav><a href="/" data-route>Back to Home</a><a href="/login" data-route>Sign In</a></nav></header>`;
+
+const field = (label, input) => `<label>${clean(label)}${input}</label>`;
+
+function requestForm(type) {
+  const isDemo = type === 'DEMO';
+  return `<form class="request-form" data-public-request="${type}">
+    <input type="hidden" name="request_type" value="${type}">
+    <input class="request-honeypot" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <div class="request-form-grid">
+      ${field('Name', '<input name="name" autocomplete="name" maxlength="100" required>')}
+      ${field('Work Email', '<input name="email" type="email" autocomplete="email" maxlength="320" required>')}
+      ${field('Company', '<input name="company" autocomplete="organization" maxlength="120">')}
+      ${field('Role / Job Title', '<input name="role" autocomplete="organization-title" maxlength="120">')}
+      ${field('Approximate Monthly AI Spend', '<select name="ai_spend_range"><option value="">Prefer not to say</option><option>Under $1,000</option><option>$1,000–$10,000</option><option>$10,000–$50,000</option><option>$50,000–$250,000</option><option>$250,000+</option></select>')}
+      ${field('Preferred Contact', '<select name="preferred_contact"><option>Email</option><option>Phone / video call</option></select>')}
+    </div>
+    ${field('AI Providers Currently Used', '<input name="providers" maxlength="300" placeholder="Optional">')}
+    ${field(isDemo ? 'What would you like to review with us?' : 'What are you hoping to use CutAIcost for?', '<textarea name="goals" maxlength="1500" rows="5" required></textarea>')}
+    <button class="button primary request-submit" type="submit">${isDemo ? 'Request a Demo' : 'Request Access'}</button>
+    <p class="request-status" role="status" aria-live="polite"></p>
+  </form>`;
+}
+
+export function demoPage() {
+  return `${demoHeader()}<main id="main" class="request-shell">
+    <section class="request-hero">
+      <p class="eyebrow">PRIVATE PRODUCT ACCESS</p>
+      <h1>See CutAIcost with us.</h1>
+      <p>We do not expose the working product, dashboards, or internal workflows through a public demo. Tell us what you are evaluating and we will follow up for a private walkthrough or account access.</p>
+      <div class="request-trust"><span>Private walkthrough</span><span>No public dashboard</span><span>Access by approval</span></div>
+    </section>
+    <section class="request-options" aria-label="Demo and access requests">
+      <article class="request-card" id="book-demo">
+        <p class="eyebrow">BOOK A DEMO</p>
+        <h2>Request a private demonstration</h2>
+        <p>Meet with us for a guided overview tailored to your organization. No customer credentials or production telemetry are required to request a meeting.</p>
+        ${requestForm('DEMO')}
+      </article>
+      <article class="request-card" id="access">
+        <p class="eyebrow">REQUEST ACCESS</p>
+        <h2>Interested in an account?</h2>
+        <p>Public self-registration is closed. Submit an access request and we will review it before account enrollment.</p>
+        ${requestForm('ACCESS')}
+      </article>
+    </section>
+    <section class="request-privacy"><strong>Private by design.</strong><span>Submitting this form does not connect an AI provider, upload telemetry, or grant access to the CutAIcost application.</span></section>
+  </main>`;
+}
+
+export function stopDemo() {}
+
+async function submitRequest(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  const status = form.querySelector('.request-status');
+  const data = Object.fromEntries(new FormData(form));
+  button.disabled = true;
+  status.textContent = 'Sending request…';
+  try {
+    const response = await fetch('/api/v1/public/requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(data),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = Array.isArray(payload.detail) ? payload.detail.map((item) => item.msg).join('. ') : payload.detail;
+      throw new Error(typeof detail === 'string' ? detail : 'Unable to submit your request.');
+    }
+    form.reset();
+    status.textContent = data.request_type === 'DEMO' ? 'Demo request received. We will follow up with you.' : 'Access request received. We will review it and follow up with you.';
+  } catch (error) {
+    status.textContent = error.message || 'Unable to submit your request.';
+    button.disabled = false;
+  }
+}
+
+export function wireDemo() {
+  protectPublicSurface();
+  document.querySelectorAll('[data-public-request]').forEach((form) => form.addEventListener('submit', submitRequest));
+  if (location.hash === '#access') {
+    requestAnimationFrame(() => document.querySelector('#access')?.scrollIntoView({ block: 'start' }));
+  }
+}
