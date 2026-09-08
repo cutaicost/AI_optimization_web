@@ -113,6 +113,10 @@ def test_expanded_official_catalog_exact_values_and_existing_four():
     assert prices["gpt-4.1"]==("2","8","0.5");assert prices["gpt-4o"]==("2.5","10","1.25");assert prices["gpt-5-nano"]==("0.05","0.4","0.005");assert prices["o4-mini"]==("1.1","4.4","0.275")
     assert prices["gpt-5.4-pro"][2] is None
 
+def test_public_demo_pricing_is_static_sanitized_and_database_independent(client):
+    response=client.get("/api/v1/pricing/demo");assert response.status_code==200;data=response.json();assert data["workload"]=="SIMULATED";assert len(data["items"])==4
+    assert {x["model"] for x in data["items"]}=={"gpt-6-astra","gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna"};assert all(set(x)=={"model","input","output","cached_input","source"} for x in data["items"])
+
 def test_exact_alias_resolution_no_fuzzy_matching_and_categories():
     assert ALIASES["gpt-5.6"]=="gpt-5.6-sol";assert ALIASES["gpt-4o-2024-08-06"]=="gpt-4o";assert "gpt-4o-made-up" not in ALIASES
     assert category("gpt-realtime-2")=="REALTIME";assert category("gpt-image-2")=="IMAGE";assert category("text-embedding-3-large")=="EMBEDDINGS";assert category("sora-2")=="VIDEO";assert lifecycle("gpt-4o")=="LEGACY";assert lifecycle("gpt-6-astra")=="CURRENT"

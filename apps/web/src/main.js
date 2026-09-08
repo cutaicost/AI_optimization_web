@@ -1,6 +1,8 @@
 import './styles.css';
+import './landing.css';
 import './advanced.css';
 import { api } from './api.js';
+import { demoPage, stopDemo, wireDemo } from './demo.js';
 const app = document.querySelector('#app');
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const money = (value) =>
@@ -12,7 +14,7 @@ const number = (value) => Number(value || 0).toLocaleString();
 let currentUser = null;
 let liveSource = null;
 const routes = {
-  public: new Set(['/', '/login', '/register']),
+  public: new Set(['/', '/demo', '/login', '/register']),
   app: new Set(['/app', '/app/overview', '/app/usage', '/app/costs', '/app/models', '/app/model-pricing', '/app/live', '/app/forecasts', '/app/optimization', '/app/anomalies', '/app/budgets', '/app/import', '/app/scenario-lab', '/app/reports', '/app/integrations', '/app/profile']),
   admin: new Set(['/admin', '/admin/users', '/admin/audit', '/admin/system']),
 };
@@ -30,7 +32,7 @@ document.addEventListener('click', (event) => {
   }
 });
 function publicHeader() {
-  return `<header class="public-nav"><a href="/" data-route class="brand">AI Optimization Tool</a><nav aria-label="Public navigation"><a href="/login" data-route>Sign In</a><a href="/register" data-route class="button primary">Create Profile</a></nav></header>`;
+  return `<header class="public-nav"><div class="public-nav-inner"><a href="/" data-route class="brand">CutAIcost</a><nav aria-label="Public navigation"><a href="#product">Product</a><a href="/demo" data-route>Demo</a><a href="/login" data-route>Sign In</a><a href="/demo" data-route class="button primary">Try Demo</a></nav></div></header>`;
 }
 async function landing() {
   let telemetry = null;
@@ -40,17 +42,13 @@ async function landing() {
     });
     if (response.ok) telemetry = await response.json();
   } catch {}
-  const live = telemetry ? `<section class="panel"><h2>OpenAI provider telemetry</h2><p><span class="badge">${esc(telemetry.source)}</span> ${esc(telemetry.status)}${telemetry.latency_ms === null ? '' : ` · ${number(telemetry.latency_ms)} ms`}</p><p>${telemetry.models.length ? `${number(telemetry.models.length)} authoritative pricing records; model availability is reported only when observed.` : 'No authoritative pricing records available.'} Organization usage is not available with a project API key.</p></section>` : '';
-  return `${publicHeader()}<main id="main"><section class="hero"><p class="eyebrow">AI TELEMETRY & FINOPS</p><h1>Understand every token.<br><span>Optimize every decision.</span></h1><p class="lede">A secure operating view for AI usage, spend, model performance, forecasts, anomalies, and quality-constrained optimization.</p><div class="hero-actions"><a href="/login" data-route class="button primary">Sign In</a><a href="/register" data-route class="button">Create Profile</a></div></section>${live}<section class="feature-grid" aria-label="Platform capabilities">${[
-    ['Usage intelligence', 'Attribute token volume across applications and models.'],
-    ['Cost control', 'Track spend, budgets, and unit economics.'],
-    ['Forecasting', 'Plan capacity and financial exposure from observed history.'],
-    ['Optimization', 'Find defensible opportunities without assuming quality equivalence.'],
-    ['Operational signals', 'Surface anomalies and model reliability evidence.'],
-    ['Enterprise analytics', 'Build an auditable, ownership-aware view of AI operations.'],
-  ]
-    .map(([title, text]) => `<article><h2>${title}</h2><p>${text}</p></article>`)
-    .join('')}</section></main><footer class="public-footer">Private by design · Multi-user web foundation · v0.2.0</footer>`;
+  const status=telemetry?.status||'Not connected',available=status==='AVAILABLE',models=Array.isArray(telemetry?.models)?telemetry.models:[],latency=telemetry?.latency_ms;
+  const preview=`<aside class="hero-preview" aria-label="Live platform status"><div class="preview-head"><div><p class="eyebrow">LIVE PLATFORM STATUS</p><h2>OpenAI</h2></div><span class="status-dot ${available?'available':''}">${available?'Available':esc(status)}</span></div><div class="preview-metrics"><div><span>Latency</span><strong>${latency==null?'—':`${number(latency)} ms`}</strong></div><div><span>Pricing records</span><strong>${number(models.length)}</strong></div><div><span>Catalog</span><strong>${models.length?'Verified':'No records'}</strong></div></div><div class="signal-preview" aria-label="Recent public provider signal"><div class="signal-grid"></div><svg viewBox="0 0 440 72" role="img" aria-label="Provider signal visualization"><polyline points="0,45 34,44 55,30 76,48 102,42 126,43 148,22 170,49 202,44 226,38 250,42 278,41 302,26 324,46 350,42 378,43 402,35 440,42"/></svg></div><div class="preview-foot"><span>Recent activity</span><span>Token spend</span><span>Latency</span><span>Model availability</span></div><p class="preview-note">${telemetry?'Public provider status only. No organization usage is exposed.':'Provider status is currently unavailable. No customer data is shown.'}</p></aside>`;
+  return `${publicHeader()}<main id="main" class="landing-page"><section class="landing-container landing-hero"><div class="hero-copy"><p class="eyebrow">AI TELEMETRY & FINOPS</p><h1>Understand every token.<br><span>Optimize every decision.</span></h1><p class="lede">AI cost intelligence, live telemetry, model pricing, forecasting, and quality-constrained optimization in one secure platform.</p><div class="hero-actions"><a href="/demo" data-route class="button primary">Try Interactive Demo</a><a href="/login" data-route class="button">Sign In</a></div><p class="hero-note">No account or API key required.</p></div>${preview}</section><section id="product" class="landing-container primary-capabilities" aria-label="Primary platform capabilities">${[
+    ['AI Cost Intelligence','Track token usage, pricing, budgets, and spend.'],['Live Telemetry','Observe model performance, latency, tokens, and cost signals.'],['Optimization','Identify cost opportunities while respecting quality requirements.']
+  ].map(([title,text],index)=>`<article><span class="feature-number">0${index+1}</span><h2>${title}</h2><p>${text}</p></article>`).join('')}</section><section class="secondary-section"><div class="landing-container"><header class="section-intro"><p class="eyebrow">A COMPLETE OPERATING VIEW</p><h2>From usage signal to financial decision.</h2></header><div class="secondary-features">${[
+    ['Forecasting','Model future exposure from observed trends.'],['Operational Signals','Surface anomalies and reliability evidence.'],['Enterprise Analytics','Maintain an auditable ownership-aware view.'],['Model Pricing','Compare maintained model economics.'],['Reports','Share clear operational assessments.'],['Budgets','Set accountable spend guardrails.']
+  ].map(([title,text])=>`<article><h3>${title}</h3><p>${text}</p></article>`).join('')}</div></div></section><section class="landing-container demo-showcase"><div><p class="eyebrow">INTERACTIVE PRODUCT TOUR</p><h2>See CutAIcost in action.</h2><p>Explore a simulated AI workload and see how CutAIcost analyzes spend, model usage, telemetry, and optimization opportunities.</p><p class="demo-proof">No signup. <span>No API key.</span> No customer data.</p></div><a href="/demo" data-route class="button primary">Launch Interactive Demo</a></section><section class="landing-container final-cta"><div><h2>Ready to analyze your own AI environment?</h2><p>Establish a private baseline and find quality-constrained opportunities.</p></div><div><a href="/register" data-route class="button primary">Create Profile</a><a href="/demo" data-route class="button">Try Demo</a></div></section></main><footer class="public-footer"><div class="landing-container">Private by design · Quality-constrained optimization · v0.2.0</div></footer>`;
 }
 function authPage(kind) {
   const register = kind === 'register';
@@ -182,7 +180,9 @@ async function system() {
 async function render() {
   const path = location.pathname;
   if(liveSource){liveSource.close();liveSource=null}
+  stopDemo();
   app.innerHTML = '<main id="main" class="loading" role="status">Loading…</main>';
+  if(path==='/demo'){currentUser=null;app.innerHTML=demoPage();wire();wireDemo();return}
   try {
     currentUser = (await api('/auth/me')).user;
   } catch {

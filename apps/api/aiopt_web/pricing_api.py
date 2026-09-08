@@ -16,6 +16,10 @@ from .security import utcnow
 router=APIRouter(prefix="/api/v1/admin/pricing");public_router=APIRouter(prefix="/api/v1/pricing")
 SOURCE="https://developers.openai.com/api/docs/models/compare";MODEL_SOURCE="https://api.openai.com/v1/models"
 SOURCE_LABEL="OpenAI Official Pricing Documentation";STALE_AFTER_DAYS=180
+@public_router.get("/demo")
+def demo_catalog():
+    selected={"gpt-6-astra","gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna"}
+    return {"items":[{"model":model,"input":float(inp),"output":float(out),"cached_input":float(cached) if cached is not None else None,"source":source(model)} for provider,model,inp,out,cached in CATALOG if provider=="openai" and model in selected],"unit":"USD_PER_MILLION_TOKENS","workload":"SIMULATED"}
 class RefreshIn(BaseModel):
     model_config=ConfigDict(extra="forbid");provider:str=Field("openai",pattern=r"^[a-z0-9_.-]+$");apply:bool=False;confirm_anomalies:bool=False
 def validate_prices(provider):
