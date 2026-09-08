@@ -80,8 +80,8 @@ def test_signed_in_pricing_catalog_unknown_override_filters_and_sort(client):
     owner,_headers=login(client,"priceviewer")
     with SessionLocal() as db:
         db.add(PricingCatalogModel(provider="openai",model_id="unknown-model",display_name="Unknown Model",catalog_source_reference="provider",retrieved_at=datetime.now(timezone.utc)));db.add(PriceOverride(user_id=owner,provider="openai",model="gpt-5.6-luna",input_price=0.1,output_price=0.5));db.commit()
-    data=client.get("/api/v1/pricing?sort=input").json();by_model={x["model"]:x for x in data["items"]};assert data["categories"]==["TEXT_REASONING"];assert by_model["unknown-model"]["status"]=="UNKNOWN";assert by_model["unknown-model"]["pricing_category"]=="UNKNOWN";assert by_model["unknown-model"]["input_price_per_1m"] is None;assert by_model["gpt-5.6-luna"]["status"]=="MANUAL_OVERRIDE";assert by_model["gpt-5.6-luna"]["pricing_category"]=="TEXT_REASONING";assert by_model["gpt-5.6-luna"]["input_price_per_1m"]==.1
-    assert [x["model"] for x in client.get("/api/v1/pricing?missing=true").json()["items"]]==["unknown-model"]
+    data=client.get("/api/v1/pricing?sort=input").json();by_model={x["model"]:x for x in data["items"]};assert data["categories"]==["TEXT_REASONING"];assert set(data["providers"])>={"openai","anthropic","google","xai","mistral","deepseek","cohere","perplexity"};assert by_model["unknown-model"]["status"]=="UNKNOWN";assert by_model["unknown-model"]["pricing_category"]=="UNKNOWN";assert by_model["unknown-model"]["input_price_per_1m"] is None;assert by_model["gpt-5.6-luna"]["status"]=="MANUAL_OVERRIDE";assert by_model["gpt-5.6-luna"]["pricing_category"]=="TEXT_REASONING";assert by_model["gpt-5.6-luna"]["input_price_per_1m"]==.1
+    assert {x["model"] for x in client.get("/api/v1/pricing?missing=true").json()["items"]}=={"unknown-model","command-a-plus-05-2026"}
 
 def test_revoked_admin_key_leaves_previous_catalog_intact(client,monkeypatch):
     monkeypatch.setattr(OpenAIAdapter,"_models",models);_admin,headers=login(client,"revokedadmin","ADMIN");client.post("/api/v1/providers/openai/connect",headers=headers,json={"credential":KEY})
@@ -89,6 +89,13 @@ def test_revoked_admin_key_leaves_previous_catalog_intact(client,monkeypatch):
     def revoked(*_):raise ProviderError("OpenAI rejected this credential.","INVALID")
     monkeypatch.setattr(OpenAIAdapter,"_models",revoked);response=client.post("/api/v1/admin/pricing/refresh",headers=headers,json={"provider":"openai","apply":True});assert response.status_code==401;assert KEY not in response.text
     with SessionLocal() as db:assert db.get(PricingRecord,before_id).effective_to is None;assert db.scalar(select(PricingRefresh).where(PricingRefresh.success.is_(False))).validation_errors==["OpenAI rejected this credential."]
+
+def test_cross_provider_repricing_preserves_workload_and_owner_override(client):
+    owner,_headers=login(client,"repriceowner")
+    with SessionLocal() as db:db.add(PriceOverride(user_id=owner,provider="anthropic",model="claude-sonnet-5",input_price=1,output_price=2));db.commit()
+    response=client.post("/api/v1/pricing/compare",json={"provider":"anthropic","model":"claude-sonnet-5","input_tokens":1_000_000,"output_tokens":1_000_000})
+    assert response.status_code==200;data=response.json();assert data["workload_preserved"] is True;assert data["current"]["estimated_cost"]==3;assert 1<=len(data["alternatives"])<=8;assert all("quality equivalence" in x["notice"].lower() for x in data["alternatives"])
+    assert client.post("/api/v1/pricing/compare",json={"provider":"bad","model":"missing","input_tokens":1,"output_tokens":1}).status_code==404
 
 def test_preview_classifies_price_directions_unknowns_and_override_protection(client,monkeypatch):
     monkeypatch.setattr(OpenAIAdapter,"_models",lambda *_:([{"id":"gpt-5.6-luna"},{"id":"brand-new-unknown"}],3));admin,headers=login(client,"previewadmin","ADMIN");client.post("/api/v1/providers/openai/connect",headers=headers,json={"credential":KEY})
@@ -102,7 +109,7 @@ def test_preview_classifies_price_directions_unknowns_and_override_protection(cl
 def test_stale_status_uses_documented_180_day_review_policy(client):
     _owner,_headers=login(client,"staleviewer")
     with SessionLocal() as db:db.add(PricingRecord(provider="openai",model="old-model",effective_from=datetime(2024,1,1,tzinfo=timezone.utc),input_price=1,output_price=2,currency="USD",provenance="official",last_verified_at=datetime(2024,1,1,tzinfo=timezone.utc)));db.commit()
-    row=client.get("/api/v1/pricing").json()["items"][0];assert row["status"]=="STALE";assert row["stale_after_days"]==180;assert row["input_price_per_1m"]==1
+    row=next(x for x in client.get("/api/v1/pricing").json()["items"] if x["model"]=="old-model");assert row["status"]=="STALE";assert row["stale_after_days"]==180;assert row["input_price_per_1m"]==1
 
 def test_unknown_live_model_never_fabricates_cost(client):
     _owner,headers=login(client,"unknowncost");response=client.post("/api/v1/telemetry",headers=headers,json={"provider":"openai","model":"no-price-model","application":"gateway","input_tokens":10,"output_tokens":5});assert response.json()["cost"]=={"provider_recorded":None,"calculated":None,"pricing_known":False,"pricing_source":None}
@@ -114,8 +121,8 @@ def test_expanded_official_catalog_exact_values_and_existing_four():
     assert prices["gpt-5.4-pro"][2] is None
 
 def test_public_demo_pricing_is_static_sanitized_and_database_independent(client):
-    response=client.get("/api/v1/pricing/demo");assert response.status_code==200;data=response.json();assert data["workload"]=="SIMULATED";assert len(data["items"])==4
-    assert {x["model"] for x in data["items"]}=={"gpt-6-astra","gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna"};assert all(set(x)=={"model","input","output","cached_input","source"} for x in data["items"])
+    response=client.get("/api/v1/pricing/demo");assert response.status_code==200;data=response.json();assert data["workload"]=="SIMULATED";assert len(data["items"])==8
+    assert {x["provider"] for x in data["items"]}=={"openai","anthropic","google","xai","mistral","deepseek","cohere","perplexity"};assert all(x["pricing_unit"]=="USD_PER_MILLION_TOKENS" for x in data["items"])
 
 def test_exact_alias_resolution_no_fuzzy_matching_and_categories():
     assert ALIASES["gpt-5.6"]=="gpt-5.6-sol";assert ALIASES["gpt-4o-2024-08-06"]=="gpt-4o";assert "gpt-4o-made-up" not in ALIASES

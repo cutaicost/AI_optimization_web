@@ -1,4 +1,5 @@
 """Admin-credential-controlled global pricing and signed-in catalog views."""
+from dataclasses import replace
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal,InvalidOperation
 from fastapi import APIRouter,Depends,HTTPException,Query
@@ -11,6 +12,7 @@ from .models import PriceOverride,PricingCatalogModel,PricingRecord,PricingRefre
 from .provider_credentials import CredentialConfigurationError,decrypt_credential
 from .providers import ProviderError,provider_adapter
 from .pricing_catalog import ALIASES,CATALOG,CURRENT,REVIEWED_AT,canonical,category,lifecycle,source
+from .multi_provider_catalog import BY_KEY,CATALOG_ENTRIES,VERIFIED_AT,Workload,calculate_entry,comparable_models
 from .security import utcnow
 
 router=APIRouter(prefix="/api/v1/admin/pricing");public_router=APIRouter(prefix="/api/v1/pricing")
@@ -18,10 +20,36 @@ SOURCE="https://developers.openai.com/api/docs/models/compare";MODEL_SOURCE="htt
 SOURCE_LABEL="OpenAI Official Pricing Documentation";STALE_AFTER_DAYS=180
 @public_router.get("/demo")
 def demo_catalog():
-    selected={"gpt-6-astra","gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna"}
-    return {"items":[{"model":model,"input":float(inp),"output":float(out),"cached_input":float(cached) if cached is not None else None,"source":source(model)} for provider,model,inp,out,cached in CATALOG if provider=="openai" and model in selected],"unit":"USD_PER_MILLION_TOKENS","workload":"SIMULATED"}
+    selected={("anthropic","claude-sonnet-5"),("google","gemini-3.8-flash"),("xai","grok-4.6"),("mistral","mistral-medium-3-5"),("deepseek","deepseek-v4-pro"),("cohere","command-a-03-2025"),("perplexity","sonar-pro")}
+    items=[entry.public() for entry in CATALOG_ENTRIES if (entry.provider,entry.model) in selected]
+    # Keep one existing OpenAI row while exposing a genuinely cross-provider demo.
+    openai=next(({"provider":provider,"model":model,"display_name":model,"family":"GPT","input":float(inp),"output":float(out),"cached_input":float(cached) if cached is not None else None,"capabilities":["FRONTIER","ADVANCED_REASONING","CODING","TOOL_CALLING","STRUCTURED_OUTPUT"],"quality_tier":1,"context_window":None,"max_output_tokens":None,"source":source(model),"model_creator":"OpenAI","hosting_provider":None,"deprecated":False,"preview":False,"rules":{},"verified_at":REVIEWED_AT,"pricing_unit":"USD_PER_MILLION_TOKENS","pricing_available":True} for provider,model,inp,out,cached in CATALOG if model=="gpt-6-astra"),None)
+    return {"items":([openai] if openai else [])+items,"unit":"USD_PER_MILLION_TOKENS","workload":"SIMULATED","notice":"Verified catalog pricing; workload and comparisons are simulated. Quality equivalence is not implied."}
 class RefreshIn(BaseModel):
     model_config=ConfigDict(extra="forbid");provider:str=Field("openai",pattern=r"^[a-z0-9_.-]+$");apply:bool=False;confirm_anomalies:bool=False
+class RepriceIn(BaseModel):
+    model_config=ConfigDict(extra="forbid")
+    provider:str=Field(pattern=r"^[a-z0-9_.-]+$");model:str=Field(min_length=1,max_length=160)
+    input_tokens:int=Field(ge=0);output_tokens:int=Field(ge=0);cached_input_tokens:int=Field(0,ge=0);cache_write_tokens:int=Field(0,ge=0)
+    requests:int=Field(0,ge=0);searches:int=Field(0,ge=0);citation_tokens:int=Field(0,ge=0);reasoning_tokens:int=Field(0,ge=0)
+    context_length:int|None=Field(None,ge=1);batch:bool=False;search_context:str=Field("low",pattern="^(low|medium|high)$");region:str|None=None
+
+@public_router.post("/compare")
+def reprice(payload:RepriceIn,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+    entry=BY_KEY.get((payload.provider.casefold(),payload.model))
+    if not entry:raise HTTPException(404,"Unknown provider/model catalog entry")
+    override=db.scalar(select(PriceOverride).where(PriceOverride.user_id==user.id,PriceOverride.provider==entry.provider,PriceOverride.model==entry.model))
+    if override:entry=replace(entry,input_price=str(override.input_price),output_price=str(override.output_price),cached_input_price=None,rules={})
+    workload=Workload(**payload.model_dump(exclude={"provider","model"}))
+    result=calculate_entry(entry,workload)
+    if result is None:raise HTTPException(422,"Pricing is unavailable or the workload requires an unsupported pricing rule")
+    alternatives=[]
+    for candidate in comparable_models(entry.provider,entry.model,capabilities=set(entry.capabilities)&{"MULTIMODAL","CODING","TOOL_CALLING","STRUCTURED_OUTPUT"},context_length=payload.context_length)[:8]:
+        candidate_override=db.scalar(select(PriceOverride).where(PriceOverride.user_id==user.id,PriceOverride.provider==candidate.provider,PriceOverride.model==candidate.model))
+        if candidate_override:candidate=replace(candidate,input_price=str(candidate_override.input_price),output_price=str(candidate_override.output_price),cached_input_price=None,rules={})
+        priced=calculate_entry(candidate,workload)
+        if priced:alternatives.append({"provider":candidate.provider,"model":candidate.model,"display_name":candidate.display_name,"quality_tier":candidate.quality_tier,"estimated_cost":float(priced["total"]),"projected_difference":float(result["total"]-priced["total"]),"notice":"Pricing comparison only; quality equivalence is not assumed."})
+    return {"current":{"provider":entry.provider,"model":entry.model,"estimated_cost":float(result["total"]),"breakdown":{key:float(value) for key,value in result["components"].items()},"pricing_mode":result["pricing_mode"]},"alternatives":alternatives,"workload_preserved":True}
 def validate_prices(provider):
     result=[]
     for source_provider,model,inp,out,cached in CATALOG:
@@ -60,7 +88,10 @@ def failed_refresh(db,user,provider,row,message,status):
 def history(user:User=Depends(require_admin),db:Session=Depends(db_session)):
     rows=db.scalars(select(PricingRefresh).order_by(PricingRefresh.created_at.desc()).limit(10)).all();connections={x.provider:x for x in db.scalars(select(ProviderCredential).where(ProviderCredential.user_id==user.id)).all()}
     last_discovery=db.scalar(select(PricingCatalogModel.retrieved_at).where(PricingCatalogModel.provider=="openai").order_by(PricingCatalogModel.retrieved_at.desc()).limit(1))
-    return {"last_successful_refresh":next((x.created_at for x in rows if x.success),None),"providers":[{"provider":"openai","credential_status":connections["openai"].validation_status if "openai" in connections else "NOT_CONFIGURED","masked_identifier":connections["openai"].masked_identifier if "openai" in connections else None,"model_catalog_source":"AUTHENTICATED_PROVIDER_API","pricing_source_type":"MANUAL_MAINTAINED_CATALOG","pricing_source":SOURCE,"pricing_source_label":SOURCE_LABEL,"last_pricing_review":REVIEWED_AT,"last_model_discovery":last_discovery,"stale_after_days":STALE_AFTER_DAYS}],"items":[{"timestamp":x.created_at,"provider":x.provider,"provider_credential_id":x.provider_credential_id,"models_retrieved":x.models_retrieved,"prices_retrieved":x.prices_retrieved,"models_changed":x.models_changed,"models_added":x.models_added,"success":x.success,"source_type":x.source_type,"validation_errors":x.validation_errors} for x in rows]}
+    providers=[{"provider":"openai","credential_status":connections["openai"].validation_status if "openai" in connections else "NOT_CONFIGURED","masked_identifier":connections["openai"].masked_identifier if "openai" in connections else None,"model_catalog_source":"AUTHENTICATED_PROVIDER_API","pricing_source_type":"MANUAL_MAINTAINED_CATALOG","pricing_source":SOURCE,"pricing_source_label":SOURCE_LABEL,"last_pricing_review":REVIEWED_AT,"last_model_discovery":last_discovery,"stale_after_days":STALE_AFTER_DAYS}]
+    for provider_id in sorted({x.provider for x in CATALOG_ENTRIES}-{ "openai" }):
+        entries=[x for x in CATALOG_ENTRIES if x.provider==provider_id];providers.append({"provider":provider_id,"credential_status":"CATALOG_ONLY","masked_identifier":None,"model_catalog_source":"MANUAL_VERIFIED_OFFICIAL_DOCUMENTATION","pricing_source_type":"MANUAL_MAINTAINED_CATALOG","pricing_source":entries[0].source,"pricing_source_label":f"{provider_id.title()} official pricing documentation","last_pricing_review":VERIFIED_AT,"last_model_discovery":None,"stale_after_days":STALE_AFTER_DAYS,"models":len(entries),"priced_models":sum(x.pricing_available for x in entries)})
+    return {"last_successful_refresh":next((x.created_at for x in rows if x.success),None),"providers":providers,"items":[{"timestamp":x.created_at,"provider":x.provider,"provider_credential_id":x.provider_credential_id,"models_retrieved":x.models_retrieved,"prices_retrieved":x.prices_retrieved,"models_changed":x.models_changed,"models_added":x.models_added,"success":x.success,"source_type":x.source_type,"validation_errors":x.validation_errors} for x in rows]}
 
 @router.post("/refresh",dependencies=[Depends(require_csrf)])
 def refresh(payload:RefreshIn,user:User=Depends(require_admin),db:Session=Depends(db_session)):
@@ -95,4 +126,10 @@ def catalog(q:str="",provider:str|None=None,sort:str=Query("name",pattern="^(nam
         canonical_model=canonical(model) if provider_id=="openai" else model;base=prices.get(key) or prices.get((provider_id,canonical_model));override=overrides.get(key) or overrides.get((provider_id,canonical_model));unknown=not base and not override
         if missing and not unknown:continue
         reviewed=base.last_verified_at.replace(tzinfo=timezone.utc) if base and base.last_verified_at.tzinfo is None else base.last_verified_at if base else None;stale=bool(reviewed and reviewed<utcnow()-timedelta(days=STALE_AFTER_DAYS));base_status="FALLBACK" if base and base.provenance=="BUILT_IN_FALLBACK" else "STALE" if stale else "CURRENT" if base else "UNKNOWN";status="MANUAL_OVERRIDE" if override else base_status;catalog_row=discovered.get(key);items.append({"provider":provider_id,"model":model,"display_name":catalog_row.display_name if catalog_row else model,"availability":catalog_row.availability_status if catalog_row else "UNKNOWN","lifecycle":catalog_row.lifecycle_status or lifecycle(model) if catalog_row else lifecycle(model),"pricing_category":catalog_row.pricing_category or "UNKNOWN" if catalog_row else category(model),"canonical_pricing_model":canonical_model if canonical_model!=model else None,"input_price_per_1m":override.input_price if override else float(base.input_price) if base else None,"cached_input_price_per_1m":float(base.cached_input_price) if base and base.cached_input_price is not None and not override else None,"output_price_per_1m":override.output_price if override else float(base.output_price) if base else None,"currency":base.currency if base else "USD","status":status,"base_status":base_status,"manual_override_active":bool(override),"catalog_input_price_per_1m":float(base.input_price) if base else None,"catalog_output_price_per_1m":float(base.output_price) if base else None,"pricing_source":"MANUAL_OVERRIDE" if override else base.provenance if base else None,"effective_at":base.effective_from if base else None,"last_pricing_review":base.last_verified_at if base else None,"stale_after_days":STALE_AFTER_DAYS,"retrieved_at":catalog_row.retrieved_at if catalog_row else base.last_verified_at if base else None,"catalog_source":catalog_row.catalog_source_type if catalog_row else None,"additional_dimensions":catalog_row.extra_pricing_dimensions or {} if catalog_row else {}})
+    existing={(x["provider"],x["model"]) for x in items}
+    for entry in CATALOG_ENTRIES:
+        if (entry.provider,entry.model) in existing or (provider and entry.provider!=provider.casefold()) or (q and q.casefold() not in f"{entry.model} {entry.display_name}".casefold()):continue
+        override=overrides.get((entry.provider,entry.model));unknown=not entry.pricing_available and not override
+        if missing!=unknown and missing:continue
+        public=entry.public();items.append({"provider":entry.provider,"model":entry.model,"display_name":entry.display_name,"availability":"AVAILABLE","lifecycle":"CURRENT","pricing_category":"TEXT_REASONING","canonical_pricing_model":None,"input_price_per_1m":override.input_price if override else public["input"],"cached_input_price_per_1m":None if override else public["cached_input"],"output_price_per_1m":override.output_price if override else public["output"],"currency":"USD","status":"MANUAL_OVERRIDE" if override else "CURRENT" if entry.pricing_available else "UNKNOWN","base_status":"CURRENT" if entry.pricing_available else "UNKNOWN","manual_override_active":bool(override),"catalog_input_price_per_1m":public["input"],"catalog_output_price_per_1m":public["output"],"pricing_source":"MANUAL_OVERRIDE" if override else entry.source,"effective_at":VERIFIED_AT,"last_pricing_review":VERIFIED_AT,"stale_after_days":STALE_AFTER_DAYS,"retrieved_at":VERIFIED_AT,"catalog_source":"MANUAL_MAINTAINED_CATALOG","additional_dimensions":entry.rules,"model_family":entry.family,"capabilities":list(entry.capabilities),"quality_tier":entry.quality_tier,"context_window":entry.context_window,"max_output_tokens":entry.max_output_tokens,"model_creator":entry.model_creator,"hosting_provider":entry.hosting_provider,"deprecated":entry.deprecated,"preview":entry.preview,"pricing_available":entry.pricing_available})
     items.sort(key=(lambda x:(x["input_price_per_1m"] is None,x["input_price_per_1m"] or 0)) if sort=="input" else (lambda x:(x["output_price_per_1m"] is None,x["output_price_per_1m"] or 0)) if sort=="output" else lambda x:(x["provider"],x["model"]));return {"unit":"USD_PER_MILLION_TOKENS","items":items,"providers":sorted({x["provider"] for x in items}),"categories":sorted({x["pricing_category"] for x in items if x["pricing_category"] and x["pricing_category"]!="UNKNOWN"})}
