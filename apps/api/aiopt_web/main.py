@@ -21,6 +21,8 @@ from .advanced import router as advanced_router
 from .oidc import router as oidc_router
 from .enterprise import router as enterprise_router
 from .provider_api import public_router as provider_public_router,router as provider_api_router
+from .live_api import router as live_router
+from .pricing_api import public_router as pricing_public_router,router as pricing_router
 from .cost_engine import CostCalculator
 from .import_storage import get_import_storage
 from .telemetry_import import cleanup_stale_files
@@ -63,6 +65,9 @@ app.include_router(oidc_router)
 app.include_router(enterprise_router)
 app.include_router(provider_api_router)
 app.include_router(provider_public_router)
+app.include_router(live_router)
+app.include_router(pricing_router)
+app.include_router(pricing_public_router)
 app.add_middleware(CORSMiddleware,allow_origins=list(cfg.allowed_origins),allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE"],allow_headers=["Content-Type","X-CSRF-Token"])
 
 @app.middleware("http")
@@ -155,17 +160,25 @@ def overview(user:User=Depends(require_operational_user),db:Session=Depends(db_s
 
 @app.post("/api/v1/telemetry",status_code=201,dependencies=[Depends(require_csrf)])
 def ingest(payload:EventIn,user:User=Depends(require_analyst),db:Session=Depends(db_session)):
-    at=utcnow();calculated=CostCalculator(db).calculate(payload.provider,payload.model,at,payload.input_tokens,payload.output_tokens);recorded=payload.estimated_cost if "estimated_cost" in payload.model_fields_set else None;display_cost=float(calculated.total_cost) if calculated else float(recorded or 0)
-    row=TelemetryEvent(user_id=user.id,provider=payload.provider,model=payload.model,application=payload.application,input_tokens=payload.input_tokens,output_tokens=payload.output_tokens,total_tokens=payload.input_tokens+payload.output_tokens,duration_ms=payload.duration_ms,estimated_cost=display_cost,provider_recorded_cost=recorded,calculated_cost=calculated.total_cost if calculated else None,pricing_record_id=calculated.pricing_record_id if calculated else None,provenance="DIRECT_API",metadata_json=payload.metadata);db.add(row);db.commit();return {"id":row.id,"cost":{"provider_recorded":recorded,"calculated":calculated.total_cost if calculated else None,"pricing_known":calculated is not None}}
+    at=utcnow();calculated=CostCalculator(db,user.id).calculate(payload.provider,payload.model,at,payload.input_tokens,payload.output_tokens,payload.cached_input_tokens or 0);recorded=payload.estimated_cost if "estimated_cost" in payload.model_fields_set else None;display_cost=float(calculated.total_cost) if calculated else float(recorded or 0)
+    metadata=payload.metadata|{k:v for k,v in {"cached_tokens":payload.cached_input_tokens,"time_to_first_token_ms":payload.time_to_first_token_ms,"status":payload.status}.items() if v is not None}
+    row=TelemetryEvent(user_id=user.id,provider=payload.provider,model=payload.model,application=payload.application,input_tokens=payload.input_tokens,output_tokens=payload.output_tokens,total_tokens=payload.input_tokens+payload.output_tokens,duration_ms=payload.duration_ms,estimated_cost=display_cost,provider_recorded_cost=recorded,calculated_cost=calculated.total_cost if calculated else None,pricing_record_id=calculated.pricing_record_id if calculated else None,provenance="GATEWAY",metadata_json=metadata);db.add(row)
+    from .models import LiveTelemetrySession
+    live=db.scalar(select(LiveTelemetrySession).where(LiveTelemetrySession.user_id==user.id,LiveTelemetrySession.status=="ACTIVE"));
+    if live:live.last_event_at=at
+    db.commit();return {"id":row.id,"cost":{"provider_recorded":recorded,"calculated":calculated.total_cost if calculated else None,"pricing_known":calculated is not None,"pricing_source":calculated.pricing_source if calculated else None}}
 
 @app.delete("/api/v1/telemetry",dependencies=[Depends(require_csrf)])
-def clear_telemetry(user:User=Depends(require_analyst),db:Session=Depends(db_session)):
+def clear_telemetry(user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
+    from .models import LiveTelemetrySession
+    if db.scalar(select(LiveTelemetrySession).where(LiveTelemetrySession.user_id==user.id,LiveTelemetrySession.status=="ACTIVE")):raise HTTPException(409,"Telemetry cannot be cleared while a live session is active")
     jobs=db.scalars(select(ImportJob).where(ImportJob.user_id==user.id)).all()
     if any(job.status in {"CREATED","UPLOADED","ANALYZING","READY","QUEUED","PREPARING","IMPORTING","CANCELLING"} for job in jobs):raise HTTPException(409,"Telemetry cannot be cleared while an import is active")
     count=db.execute(delete(TelemetryEvent).where(TelemetryEvent.user_id==user.id)).rowcount
     from .models import ForecastRun
     forecasts=db.execute(delete(ForecastRun).where(ForecastRun.user_id==user.id)).rowcount
-    db.execute(delete(ImportJob).where(ImportJob.user_id==user.id));audit(db,"telemetry.cleared",actor=user.id,resource_type="telemetry",records=count,imports=len(jobs),forecasts=forecasts);db.commit()
+    sessions=db.execute(delete(LiveTelemetrySession).where(LiveTelemetrySession.user_id==user.id)).rowcount
+    db.execute(delete(ImportJob).where(ImportJob.user_id==user.id));audit(db,"telemetry.cleared",actor=user.id,resource_type="telemetry",records=count,imports=len(jobs),forecasts=forecasts,live_sessions=sessions);db.commit()
     for job in jobs:
         try:get_import_storage().delete(job.storage_id)
         except OSError:pass

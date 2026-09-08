@@ -181,3 +181,48 @@ class ProviderModel(Base):
     __tablename__="provider_models";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True);provider:Mapped[str]=mapped_column(String(80));model_id:Mapped[str]=mapped_column(String(160));owned_by:Mapped[str|None]=mapped_column(String(120),nullable=True);provider_created_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True);context_window:Mapped[int|None]=mapped_column(Integer,nullable=True);modalities:Mapped[list|None]=mapped_column(JSON,nullable=True);capabilities:Mapped[dict|None]=mapped_column(JSON,nullable=True);last_seen_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);__table_args__=(UniqueConstraint("user_id","provider","model_id",name="uq_provider_model_owner"),)
 class PricingRecord(Base):
     __tablename__="pricing_records";id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier);provider:Mapped[str]=mapped_column(String(80),index=True);model:Mapped[str]=mapped_column(String(160),index=True);effective_from:Mapped[datetime]=mapped_column(DateTime(timezone=True),index=True);effective_to:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True,index=True);pricing_unit:Mapped[str]=mapped_column(String(40),default="PER_MILLION_TOKENS");input_price:Mapped[float]=mapped_column(Numeric(24,12));output_price:Mapped[float]=mapped_column(Numeric(24,12));cached_input_price:Mapped[float|None]=mapped_column(Numeric(24,12),nullable=True);currency:Mapped[str]=mapped_column(String(3),default="USD");region:Mapped[str|None]=mapped_column(String(80),nullable=True);provenance:Mapped[str]=mapped_column(String(500));last_verified_at:Mapped[datetime]=mapped_column(DateTime(timezone=True));__table_args__=(UniqueConstraint("provider","model","effective_from","region",name="uq_pricing_version"),)
+
+class LiveTelemetrySession(Base):
+    __tablename__="live_telemetry_sessions"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier)
+    user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True)
+    provider:Mapped[str]=mapped_column(String(80),default="openai")
+    mode:Mapped[str]=mapped_column(String(30),default="GATEWAY")
+    status:Mapped[str]=mapped_column(String(20),default="ACTIVE",index=True)
+    started_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+    stopped_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True)
+    last_event_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True)
+    __table_args__=(Index("ix_live_owner_status","user_id","status"),)
+
+class PricingRefresh(Base):
+    __tablename__="pricing_refreshes"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier)
+    admin_user_id:Mapped[str]=mapped_column(ForeignKey("users.id",ondelete="RESTRICT"),index=True)
+    created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now,index=True)
+    source:Mapped[str]=mapped_column(String(500))
+    providers_checked:Mapped[int]=mapped_column(Integer,default=0)
+    models_checked:Mapped[int]=mapped_column(Integer,default=0)
+    models_changed:Mapped[int]=mapped_column(Integer,default=0)
+    models_unchanged:Mapped[int]=mapped_column(Integer,default=0)
+    models_added:Mapped[int]=mapped_column(Integer,default=0)
+    success:Mapped[bool]=mapped_column(Boolean,default=False)
+    validation_errors:Mapped[list]=mapped_column(JSON,default=list)
+    provider:Mapped[str]=mapped_column(String(80),default="openai")
+    provider_credential_id:Mapped[str|None]=mapped_column(String(36),nullable=True)
+    models_retrieved:Mapped[int]=mapped_column(Integer,default=0)
+    prices_retrieved:Mapped[int]=mapped_column(Integer,default=0)
+    source_type:Mapped[str]=mapped_column(String(60),default="MANUAL_MAINTAINED_CATALOG")
+
+class PricingCatalogModel(Base):
+    __tablename__="pricing_catalog_models"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=identifier)
+    provider:Mapped[str]=mapped_column(String(80),index=True)
+    model_id:Mapped[str]=mapped_column(String(160),index=True)
+    display_name:Mapped[str]=mapped_column(String(200))
+    availability_status:Mapped[str]=mapped_column(String(30),default="AVAILABLE")
+    catalog_source_type:Mapped[str]=mapped_column(String(60),default="AUTHENTICATED_PROVIDER_API")
+    catalog_source_reference:Mapped[str]=mapped_column(String(500))
+    discovered_by_credential_id:Mapped[str|None]=mapped_column(String(36),nullable=True)
+    retrieved_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+    extra_pricing_dimensions:Mapped[dict]=mapped_column(JSON,default=dict)
+    __table_args__=(UniqueConstraint("provider","model_id",name="uq_pricing_catalog_provider_model"),)

@@ -41,11 +41,10 @@ def test_connect_validate_models_isolation_redaction_and_disconnect(client,monke
     with SessionLocal() as db:assert db.scalar(select(ProviderCredential)) is None
     assert KEY not in caplog.text
 
-def test_provider_controls_are_admin_only_and_public_payload_is_sanitized(client,monkeypatch):
+def test_provider_controls_are_owner_available_and_public_payload_is_sanitized(client,monkeypatch):
     monkeypatch.setattr(OpenAIAdapter,"_models",visible_models);analyst=login(client,"analyst","ANALYST")
-    assert client.get("/api/v1/providers").status_code==403
-    assert client.post("/api/v1/providers/openai/connect",headers=analyst,json={"credential":KEY}).status_code==403
-    client.cookies.clear();headers=login(client,"admin");assert client.post("/api/v1/providers/openai/connect",headers=headers,json={"credential":KEY}).status_code==200
+    assert client.get("/api/v1/providers").status_code==200
+    assert client.post("/api/v1/providers/openai/connect",headers=analyst,json={"credential":KEY}).status_code==200
     assert client.get("/api/v1/providers/openai/models").status_code==200
     payload=client.get("/api/telemetry").json();assert payload["status"]=="AVAILABLE";assert payload["usage_available"] is False;assert KEY not in str(payload);assert "masked_identifier" not in payload
 

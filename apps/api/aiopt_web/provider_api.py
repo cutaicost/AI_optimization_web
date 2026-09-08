@@ -4,9 +4,9 @@ from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel,ConfigDict,SecretStr
 from sqlalchemy import delete,select
 from sqlalchemy.orm import Session
-from .auth import audit,enforce_rate_limit,require_admin,require_csrf
+from .auth import audit,enforce_rate_limit,require_operational_user,require_csrf
 from .database import db_session
-from .models import PricingRecord,ProviderCredential,ProviderModel,User
+from .models import LiveTelemetrySession,PricingRecord,ProviderCredential,ProviderModel,User
 from .provider_credentials import CredentialConfigurationError,decrypt_credential,encrypt_credential
 from .providers import ProviderError,provider_adapter
 from .security import utcnow
@@ -25,12 +25,12 @@ def decrypt(row):
 def limited(db,user,provider):enforce_rate_limit(db,"provider_connection",f"{user.id}:{provider}",10,15)
 
 @router.get("")
-def connections(user:User=Depends(require_admin),db:Session=Depends(db_session)):return {"items":[safe(x) for x in db.scalars(select(ProviderCredential).where(ProviderCredential.user_id==user.id)).all()],"supported":[provider_adapter("openai").get_connection_status()]}
+def connections(user:User=Depends(require_operational_user),db:Session=Depends(db_session)):return {"items":[safe(x) for x in db.scalars(select(ProviderCredential).where(ProviderCredential.user_id==user.id)).all()],"supported":[provider_adapter("openai").get_connection_status()]}
 @router.get("/{provider}")
-def status(provider:str,user:User=Depends(require_admin),db:Session=Depends(db_session)):
+def status(provider:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
     row=owned(db,user,provider.casefold());return safe(row) if row else {"provider":provider.casefold(),"status":"NOT_CONNECTED","capabilities":asdict(provider_adapter(provider).capabilities)}
 @router.post("/{provider}/connect",dependencies=[Depends(require_csrf)])
-def connect(provider:str,payload:ConnectIn,user:User=Depends(require_admin),db:Session=Depends(db_session)):
+def connect(provider:str,payload:ConnectIn,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
     provider=provider.casefold();limited(db,user,provider);adapter=provider_adapter(provider);credential=payload.credential.get_secret_value();row=owned(db,user,provider);attempted=utcnow()
     try:result=adapter.validate_credentials(credential);encrypted=encrypt_credential(credential,user.id,provider)
     except ProviderError as error:
@@ -40,7 +40,7 @@ def connect(provider:str,payload:ConnectIn,user:User=Depends(require_admin),db:S
     row=row or ProviderCredential(user_id=user.id,provider=provider);db.add(row);row.encrypted_credential=encrypted;row.key_version=1;row.masked_identifier=f"••••{credential[-4:]}";row.validation_status=result["status"];row.last_connection_attempt_at=attempted;row.last_successful_connection_at=attempted;row.last_telemetry_refresh_at=attempted;row.last_latency_ms=result.get("latency_ms");row.last_validated_at=attempted;row.updated_at=attempted;audit(db,"provider.connected",actor=user.id,resource_type="provider",resource_id=provider);db.commit();return safe(row)
 @router.post("/{provider}/validate",dependencies=[Depends(require_csrf)])
 @router.post("/{provider}/test",dependencies=[Depends(require_csrf)])
-def validate(provider:str,user:User=Depends(require_admin),db:Session=Depends(db_session)):
+def validate(provider:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
     provider=provider.casefold();limited(db,user,provider);row=owned(db,user,provider)
     if not row:raise HTTPException(404,"Provider connection not found")
     attempted=utcnow();row.last_connection_attempt_at=attempted
@@ -48,7 +48,7 @@ def validate(provider:str,user:User=Depends(require_admin),db:Session=Depends(db
         result=provider_adapter(row.provider).validate_credentials(decrypt(row));row.validation_status="CONNECTED";row.last_validated_at=attempted;row.last_successful_connection_at=attempted;row.last_telemetry_refresh_at=attempted;row.last_latency_ms=result.get("latency_ms");row.updated_at=attempted;audit(db,"provider.validated",actor=user.id,resource_type="provider",resource_id=row.provider);db.commit();return safe(row)
     except ProviderError as error:row.validation_status=error.status;row.updated_at=attempted;audit(db,"provider.validation_failed",outcome="failure",actor=user.id,resource_type="provider",resource_id=row.provider,status=error.status);db.commit();raise adapter_error(error)
 @router.get("/{provider}/models")
-def models(provider:str,user:User=Depends(require_admin),db:Session=Depends(db_session)):
+def models(provider:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
     provider=provider.casefold();limited(db,user,provider);row=owned(db,user,provider)
     if not row:raise HTTPException(404,"Provider connection not found")
     try:items=provider_adapter(row.provider).get_available_models(decrypt(row))
@@ -57,9 +57,11 @@ def models(provider:str,user:User=Depends(require_admin),db:Session=Depends(db_s
     for item in items:db.add(ProviderModel(user_id=user.id,provider=row.provider,model_id=item.id,owned_by=item.owned_by,provider_created_at=item.created_at,context_window=item.context_window,modalities=item.modalities,capabilities=item.capabilities,last_seen_at=refreshed))
     row.last_telemetry_refresh_at=refreshed;row.updated_at=refreshed;db.commit();return {"provider":row.provider,"items":[asdict(x) for x in items],"unknown_metadata_remains_null":True}
 @router.delete("/{provider}",dependencies=[Depends(require_csrf)])
-def disconnect(provider:str,user:User=Depends(require_admin),db:Session=Depends(db_session)):
+def disconnect(provider:str,user:User=Depends(require_operational_user),db:Session=Depends(db_session)):
     row=owned(db,user,provider.casefold())
     if not row:raise HTTPException(404,"Provider connection not found")
+    stopped=utcnow()
+    for session in db.scalars(select(LiveTelemetrySession).where(LiveTelemetrySession.user_id==user.id,LiveTelemetrySession.provider==row.provider,LiveTelemetrySession.status=="ACTIVE")):session.status="STOPPED";session.stopped_at=stopped
     db.delete(row);db.execute(delete(ProviderModel).where(ProviderModel.user_id==user.id,ProviderModel.provider==row.provider));audit(db,"provider.disconnected",actor=user.id,resource_type="provider",resource_id=row.provider);db.commit();return {"provider":row.provider,"status":"DISCONNECTED","revocation_required":True}
 
 @public_router.get("/api/telemetry")

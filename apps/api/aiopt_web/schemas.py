@@ -31,7 +31,7 @@ class PasswordChangeIn(StrictModel):
         return value
 class ProfileIn(StrictModel): display_name:str=Field(min_length=1,max_length=100);email:EmailStr;organization:str|None=Field(None,max_length=120);job_title:str|None=Field(None,max_length=120);preferences:dict=Field(default_factory=dict)
 class AdminUserUpdateIn(StrictModel): role:str|None=Field(None,pattern=r"^(ADMIN|ANALYST|VIEWER)$");is_active:bool|None=None
-class EventIn(StrictModel): provider:str=Field(max_length=80);model:str=Field(max_length=160);application:str=Field(max_length=120);input_tokens:int=Field(0,ge=0);output_tokens:int=Field(0,ge=0);duration_ms:float=Field(0,ge=0);estimated_cost:float=Field(0,ge=0);metadata:dict=Field(default_factory=dict)
+class EventIn(StrictModel): provider:str=Field(max_length=80);model:str=Field(max_length=160);application:str=Field(max_length=120);input_tokens:int=Field(0,ge=0);output_tokens:int=Field(0,ge=0);cached_input_tokens:int|None=Field(None,ge=0);duration_ms:float=Field(0,ge=0);time_to_first_token_ms:float|None=Field(None,ge=0);status:str|None=Field(None,max_length=40);estimated_cost:float=Field(0,ge=0);metadata:dict=Field(default_factory=dict)
 
 class ImportStartIn(StrictModel):
     filename:str=Field(min_length=1,max_length=255)

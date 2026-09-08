@@ -10,9 +10,10 @@ const money = (value) =>
   });
 const number = (value) => Number(value || 0).toLocaleString();
 let currentUser = null;
+let liveSource = null;
 const routes = {
   public: new Set(['/', '/login', '/register']),
-  app: new Set(['/app', '/app/overview', '/app/usage', '/app/costs', '/app/models', '/app/forecasts', '/app/optimization', '/app/anomalies', '/app/budgets', '/app/import', '/app/scenario-lab', '/app/reports', '/app/integrations', '/app/profile']),
+  app: new Set(['/app', '/app/overview', '/app/usage', '/app/costs', '/app/models', '/app/model-pricing', '/app/live', '/app/forecasts', '/app/optimization', '/app/anomalies', '/app/budgets', '/app/import', '/app/scenario-lab', '/app/reports', '/app/integrations', '/app/profile']),
   admin: new Set(['/admin', '/admin/users', '/admin/audit', '/admin/system']),
 };
 const authenticatedHome = (user) => (user.must_change_password ? '/app/profile' : user.role === 'ADMIN' ? '/admin' : '/app/overview');
@@ -60,6 +61,8 @@ const navItems = [
   ['Usage', '/app/usage'],
   ['Costs', '/app/costs'],
   ['Models', '/app/models'],
+  ['Model Pricing', '/app/model-pricing'],
+  ['Live Telemetry', '/app/live'],
   ['Forecasts', '/app/forecasts'],
   ['Optimization', '/app/optimization'],
   ['Anomalies', '/app/anomalies'],
@@ -120,12 +123,24 @@ async function importPage() {
   return shell(`${heading('Import Telemetry', 'Secure server-side streaming for CSV, JSON, and JSONL files up to 500 MB.')}<section class="panel form-panel"><form id="importForm"><label class="drop-zone">Choose telemetry file<input name="file" type="file" accept=".csv,.json,.jsonl" required></label><p class="help">Files are streamed to private temporary storage, validated, and removed after completion or cancellation.</p><button class="button primary" type="submit">Analyze File</button><p id="importStatus" role="status" aria-live="polite"></p><div id="mapping"></div></form></section><section class="panel"><h2>Import history</h2>${history.items.length ? `<table><thead><tr><th>Filename</th><th>Started</th><th>Rows</th><th>Status</th></tr></thead><tbody>${history.items.map((row) => `<tr><td>${esc(row.filename)}</td><td>${new Date(row.created_at).toLocaleString()}</td><td>${number(row.inserted_rows)} / ${number(row.total_rows)}</td><td><span class="badge">${esc(row.status)}</span></td></tr>`).join('')}</tbody></table>` : '<p class="empty">No imports yet.</p>'}</section>`);
 }
 function profile() {
-  return shell(`${heading('Profile', 'Manage your account details and security.')}<section class="panel form-panel"><form id="profileForm"><label>Username<input value="${esc(currentUser.username)}" disabled></label><label>Display Name<input name="display_name" value="${esc(currentUser.display_name)}" maxlength="100" required></label><label>Email<input name="email" type="email" value="${esc(currentUser.email)}" required></label><label>Organization<input name="organization" value="${esc(currentUser.organization || '')}" maxlength="120"></label><label>Job Title<input name="job_title" value="${esc(currentUser.job_title || '')}" maxlength="120"></label><button class="button primary">Save profile</button><p id="formStatus" role="status"></p></form></section><section class="panel form-panel"><h2>Change Password</h2><form id="passwordForm"><label>Current Password<input name="current_password" type="password" autocomplete="current-password" required></label><label>New Password<input name="new_password" type="password" autocomplete="new-password" minlength="12" required></label><button class="button">Change Password</button><p id="passwordStatus" role="alert"></p></form></section><section class="panel form-panel"><h2>Telemetry data</h2><p>Remove your telemetry and import history. This cannot be undone.</p><button class="button" type="button" data-reset>Clear Telemetry Data</button><p id="resetStatus" role="status"></p></section>`);
+  return shell(`${heading('Profile', 'Manage your account details and security.')}<section class="panel form-panel"><form id="profileForm"><label>Username<input value="${esc(currentUser.username)}" disabled></label><label>Display Name<input name="display_name" value="${esc(currentUser.display_name)}" maxlength="100" required></label><label>Email<input name="email" type="email" value="${esc(currentUser.email)}" required></label><label>Organization<input name="organization" value="${esc(currentUser.organization || '')}" maxlength="120"></label><label>Job Title<input name="job_title" value="${esc(currentUser.job_title || '')}" maxlength="120"></label><button class="button primary">Save profile</button><p id="formStatus" role="status"></p></form></section><section class="panel form-panel"><h2>Change Password</h2><form id="passwordForm"><label>Current Password<input name="current_password" type="password" autocomplete="current-password" required></label><label>New Password<input name="new_password" type="password" autocomplete="new-password" minlength="12" required></label><button class="button">Change Password</button><p id="passwordStatus" role="alert"></p></form></section><section class="panel form-panel"><h2>Telemetry data</h2><p>Remove only telemetry and analytics owned by your account.</p><button class="button" type="button" data-reset>Clear My Telemetry Data</button><p id="resetStatus" role="status"></p></section><dialog id="clearTelemetryDialog"><h2>Clear your telemetry data?</h2><p>This permanently deletes telemetry and analytics associated with your account. Your account, provider connections, budgets, settings, and configuration will remain.</p><button class="button" type="button" data-clear-cancel>Cancel</button> <button class="button" type="button" data-clear-confirm>Clear Telemetry</button></dialog>`);
 }
+async function livePage() {
+  const [status, snapshot] = await Promise.all([api('/live/status'), api('/live/snapshot')]), connection=status.connection, session=status.session, metrics=snapshot.metrics || {};
+  return shell(`${heading('Live Telemetry', 'Owner-scoped gateway observations from calls reported to CutAIcost.')}<section class="panel form-panel"><h2>Provider connection</h2><p><span class="badge">${esc(connection?.status||'NOT_CONNECTED')}</span>${connection?.masked_identifier?` ${esc(connection.masked_identifier)}`:' No credential stored'}</p>${connection?`<button class="button" data-live-disconnect>Disconnect Provider</button>`:`<form id="liveConnect"><label>OpenAI API Key<input name="credential" type="password" autocomplete="off" required></label><button class="button primary">Connect Provider</button></form>`}<p class="help">Encrypted server-side; plaintext is never returned. A key validates access but cannot reveal calls made directly to OpenAI.</p><p id="liveStatus" role="status"></p></section><section class="panel"><h2>Gateway session</h2><p><span class="badge">${esc(session?.status||'NOT_STARTED')}</span> Mode: GATEWAY</p><p>True per-request telemetry requires AI calls to be reported through the authenticated CutAIcost gateway telemetry endpoint. Provider billing snapshots are not presented as request telemetry.</p>${session?.status==='ACTIVE'?'<button class="button" data-live-stop>Stop Live Telemetry</button>':connection?'<button class="button primary" data-live-start>Start Live Telemetry</button>':''}</section>${metricCards([['Requests',number(metrics.requests)],['Tokens',number(metrics.tokens)],['Session spend',money(metrics.session_spend)],['Average latency',metrics.average_latency_ms==null?'Unknown':`${number(metrics.average_latency_ms)} ms`],['Error rate',`${((metrics.error_rate||0)*100).toFixed(1)}%`]])}<section class="panel table-wrap"><h2>Recent observed requests</h2><p id="liveUpdated">${session?.last_event_at?`Last update ${new Date(session.last_event_at).toLocaleString()}`:'Waiting for gateway events'}</p><table><thead><tr><th>Time</th><th>Provider / model</th><th>Status</th><th>Tokens</th><th>Estimated cost</th><th>Latency</th></tr></thead><tbody id="liveFeed">${(snapshot.items||[]).map(liveRow).join('')||'<tr><td colspan="6">No gateway requests observed in this session.</td></tr>'}</tbody></table></section>`);
+}
+function liveRow(row){return `<tr><td>${new Date(row.timestamp).toLocaleTimeString()}</td><td>${esc(row.provider)} / ${esc(row.model)}</td><td>${esc(row.status)}</td><td>${number(row.total_tokens)}</td><td>${row.estimated_cost==null?'Unknown':money(row.estimated_cost)}</td><td>${row.latency_ms==null?'Unknown':`${number(row.latency_ms)} ms`}</td></tr>`}
+async function pricingPage() {
+  const data=await api('/pricing');window.pricingCatalog=data.items;
+  return shell(`${heading('Model Pricing', 'Current catalog prices normalized to USD per 1 million tokens.')}<section class="panel"><form id="pricingFilters" class="inline"><label>Search models<input name="q" type="search" placeholder="Model name"></label><label>Provider<select name="provider"><option value="">All providers</option>${data.providers.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select></label><label>Sort<select name="sort"><option value="name">Alphabetical</option><option value="input">Input price</option><option value="output">Output price</option></select></label><label><input name="missing" type="checkbox"> Missing prices only</label></form></section><section class="panel table-wrap"><table><thead><tr><th>Provider</th><th>Model</th><th>Input / 1M</th><th>Cached input / 1M</th><th>Output / 1M</th><th>Updated</th><th>Status</th></tr></thead><tbody id="pricingTable">${pricingRows(data.items)}</tbody></table></section>`);
+}
+const priceCell=value=>value==null?'—':money(value);
+function pricingRows(items){return items.length?items.map(row=>`<tr><td>${esc(row.provider)}</td><td><details><summary>${esc(row.display_name||row.model)}</summary><p>Availability: ${esc(row.availability)}<br>Model source: ${esc(row.catalog_source||'Unknown')}<br>Pricing source: ${esc(row.pricing_source||'Unknown')}<br>Last pricing review: ${row.last_pricing_review?new Date(row.last_pricing_review).toLocaleDateString():'Unknown'}<br>Freshness policy: stale after ${number(row.stale_after_days)} days${row.manual_override_active?`<br>Underlying catalog: ${priceCell(row.catalog_input_price_per_1m)} input / ${priceCell(row.catalog_output_price_per_1m)} output (${esc(row.base_status)})`:''}${Object.keys(row.additional_dimensions||{}).length?`<br>Additional dimensions: ${esc(JSON.stringify(row.additional_dimensions))}`:''}</p></details></td><td>${priceCell(row.input_price_per_1m)}</td><td>${priceCell(row.cached_input_price_per_1m)}</td><td>${priceCell(row.output_price_per_1m)}</td><td>${row.effective_at?new Date(row.effective_at).toLocaleDateString():'—'}</td><td><span class="badge">${esc(row.status)}</span></td></tr>`).join(''):'<tr><td colspan="7">No catalog models match these filters.</td></tr>'}
 async function adminDashboard() {
-  const [data, providers] = await Promise.all([api('/admin/summary'), api('/providers')]),
-    openai = providers.items.find((x) => x.provider === 'openai');
-  return shell(
+  const [data, providers, pricing] = await Promise.all([api('/admin/summary'), api('/providers'), api('/admin/pricing')]),
+    openai = providers.items.find((x) => x.provider === 'openai'),
+    pricingPanel=`<section class="panel form-panel"><h2>Pricing catalog</h2><p>OpenAI credential: <span class="badge">${esc(pricing.providers[0].credential_status)}</span>${pricing.providers[0].masked_identifier?` ${esc(pricing.providers[0].masked_identifier)}`:''}</p><p>Model catalog source: OpenAI Authenticated API.<br>Pricing source: ${esc(pricing.providers[0].pricing_source_label)}.<br>The model API does not return token prices. Manual user overrides always take precedence.</p><p>Last pricing review: ${new Date(pricing.providers[0].last_pricing_review).toLocaleString()}<br>Last model discovery: ${pricing.providers[0].last_model_discovery?new Date(pricing.providers[0].last_model_discovery).toLocaleString():'Never'}<br>Prices become stale after ${number(pricing.providers[0].stale_after_days)} days without review.</p><button class="button primary" data-pricing-preview ${pricing.providers[0].credential_status==='NOT_CONFIGURED'?'disabled':''}>Sync Models & Pricing Catalog</button><div id="pricingResult"></div><dialog id="pricingDialog"><h2>Apply model and pricing catalog changes?</h2><div id="pricingPreview"></div><button class="button" data-pricing-cancel>Cancel</button> <button class="button primary" data-pricing-apply>Apply Catalog</button></dialog></section>`;
+  const page=shell(
     `${heading('Administration', 'Users, system health, security activity, and provider credentials.')}<section class="metrics">${[
       ['Total users', data.users.total],
       ['Active users', data.users.active],
@@ -137,6 +152,7 @@ async function adminDashboard() {
       .join('')}</section><section class="panel form-panel"><h2>AI Providers</h2><h3>OpenAI</h3><p><span class="badge">${esc(openai?.status || 'NOT_CONNECTED')}</span>${openai?.masked_identifier ? ` Credential ${esc(openai.masked_identifier)}` : ' No credential stored'}</p>${openai ? `<p>Last successful connection: ${openai.last_successful_connection_at ? new Date(openai.last_successful_connection_at).toLocaleString() : 'Never'}<br>Last telemetry refresh: ${openai.last_telemetry_refresh_at ? new Date(openai.last_telemetry_refresh_at).toLocaleString() : 'Never'}${openai.last_latency_ms === null ? '' : `<br>Connection latency: ${number(openai.last_latency_ms)} ms`}</p><button class="button" data-provider-validate>Test Connection</button> <button class="button" data-provider-models>Refresh Models</button> <button class="button" data-provider-disconnect>Remove</button>` : ''}<form id="openaiConnect"><label>${openai ? 'Replace API Key' : 'OpenAI API Key'}<input name="credential" type="password" autocomplete="off" required></label><button class="button primary">${openai ? 'Replace API Key' : 'Connect OpenAI'}</button></form><p class="help">The key is encrypted server-side and never returned to this browser. Billing usage requires a separate OpenAI organization Admin API key and is not collected here.</p><div id="providerModels"></div><p id="providerStatus" role="status"></p></section><section class="panel form-panel"><h2>Telemetry data</h2><p>Clear imported telemetry, import history, and derived forecasts while preserving users and configuration.</p><button class="button" type="button" data-reset>Clear Telemetry Data</button><p id="resetStatus" role="status"></p></section><dialog id="clearTelemetryDialog"><h2>Clear telemetry data?</h2><p>This will permanently delete imported telemetry and derived telemetry records. Application settings, users, integrations, budgets, and configuration will not be removed.</p><button class="button" type="button" data-clear-cancel>Cancel</button> <button class="button" type="button" data-clear-confirm>Clear Telemetry</button></dialog><section class="panel admin-links"><a href="/admin/users" data-route>Manage users</a><a href="/admin/audit" data-route>Review audit log</a><a href="/admin/system" data-route>System diagnostics</a></section>`,
     true,
   );
+  return page.replace('<section class="panel form-panel"><h2>Telemetry data</h2>',`${pricingPanel}<section class="panel form-panel"><h2>Telemetry data</h2>`);
 }
 async function adminUsers() {
   const params = new URLSearchParams(location.search),
@@ -164,6 +180,7 @@ async function system() {
 }
 async function render() {
   const path = location.pathname;
+  if(liveSource){liveSource.close();liveSource=null}
   app.innerHTML = '<main id="main" class="loading" role="status">Loading…</main>';
   try {
     currentUser = (await api('/auth/me')).user;
@@ -182,6 +199,8 @@ async function render() {
     else if (path === '/app/usage') app.innerHTML = await usage();
     else if (path === '/app/costs') app.innerHTML = await costs();
     else if (path === '/app/models') app.innerHTML = await modelsPage();
+    else if (path === '/app/model-pricing') app.innerHTML = await pricingPage();
+    else if (path === '/app/live') app.innerHTML = await livePage();
     else if (path === '/app/forecasts') app.innerHTML = await forecastsPage();
     else if (path === '/app/optimization') app.innerHTML = await optimizationPage();
     else if (path === '/app/anomalies') app.innerHTML = await anomaliesPage();
@@ -236,6 +255,15 @@ function wire() {
   document.querySelector('[data-provider-validate]')?.addEventListener('click', () => providerAction('validate'));
   document.querySelector('[data-provider-disconnect]')?.addEventListener('click', () => providerAction('', 'DELETE'));
   document.querySelector('[data-provider-models]')?.addEventListener('click', () => providerModels());
+  document.querySelector('#liveConnect')?.addEventListener('submit', connectOpenAI);
+  document.querySelector('[data-live-disconnect]')?.addEventListener('click', () => providerAction('', 'DELETE'));
+  document.querySelector('[data-live-start]')?.addEventListener('click', () => liveAction('start'));
+  document.querySelector('[data-live-stop]')?.addEventListener('click', () => liveAction('stop'));
+  document.querySelector('[data-pricing-preview]')?.addEventListener('click', previewPricing);
+  document.querySelector('[data-pricing-cancel]')?.addEventListener('click',()=>document.querySelector('#pricingDialog')?.close());
+  document.querySelector('[data-pricing-apply]')?.addEventListener('click',applyPricing);
+  document.querySelector('#pricingFilters')?.addEventListener('input',filterPricing);
+  if(location.pathname==='/app/live' && document.querySelector('[data-live-stop]'))startLiveStream();
   document.querySelector('#userSearch')?.addEventListener('submit', (event) => {
     event.preventDefault();
     const q = new FormData(event.currentTarget).get('q');
@@ -328,6 +356,20 @@ async function resetTelemetry() {
     status.textContent = error.message;
   }
 }
+async function liveAction(action){
+  const status=document.querySelector('#liveStatus');try{await api(`/live/${action}`,{method:'POST'});render()}catch(error){if(status)status.textContent=error.message}
+}
+function startLiveStream(){
+  liveSource=new EventSource('/api/v1/live/stream');liveSource.addEventListener('telemetry',(event)=>{const row=JSON.parse(event.data),feed=document.querySelector('#liveFeed');if(!feed)return;if(feed.querySelector('[colspan]'))feed.innerHTML='';feed.insertAdjacentHTML('afterbegin',liveRow(row));document.querySelector('#liveUpdated').textContent=`Last update ${new Date(row.timestamp).toLocaleString()}`});liveSource.addEventListener('session',()=>render());
+}
+let pendingPricing=null;
+async function previewPricing(){
+  const target=document.querySelector('#pricingResult');try{pendingPricing=await api('/admin/pricing/refresh',{method:'POST',body:JSON.stringify({provider:'openai',apply:false})});const increased=pendingPricing.changes.filter(x=>x.dimensions.some(d=>d.direction==='INCREASED')).length,decreased=pendingPricing.changes.filter(x=>x.dimensions.some(d=>d.direction==='DECREASED')).length;document.querySelector('#pricingPreview').innerHTML=`<p>OpenAI: ${number(pendingPricing.models_discovered)} discovered; ${number(pendingPricing.prices_retrieved)} priced; ${number(pendingPricing.new_models_discovered.length)} new models; ${number(pendingPricing.models_removed_or_unavailable.length)} unavailable; ${number(increased)} increased; ${number(decreased)} decreased; ${number(pendingPricing.models_unchanged)} unchanged; ${number(pendingPricing.models_missing_pricing.length)} unknown; ${number(pendingPricing.pricing_disappeared.length)} prices removed; ${number(pendingPricing.stale_pricing.length)} stale; ${number(pendingPricing.manual_overrides_protecting_effective_price.length)} protected by overrides.</p><p>Model source: ${esc(pendingPricing.model_catalog_source)}<br>Pricing source: ${esc(pendingPricing.pricing_source_label)}<br>Last pricing review: ${new Date(pendingPricing.last_pricing_review).toLocaleDateString()}</p>${pendingPricing.anomalies_requiring_review.length?'<p role="alert">Unusually large changes are flagged and require explicit confirmation.</p>':''}`;document.querySelector('#pricingDialog').showModal()}catch(error){target.textContent=error.message}
+}
+async function applyPricing(){
+  const target=document.querySelector('#pricingResult');try{const result=await api('/admin/pricing/refresh',{method:'POST',body:JSON.stringify({provider:'openai',apply:true,confirm_anomalies:Boolean(pendingPricing?.anomalies_requiring_review.length)})});document.querySelector('#pricingDialog').close();target.textContent=`Applied catalog refresh: ${number(result.models_changed)} changed, ${number(result.models_added)} added, ${number(result.models_unchanged)} unchanged.`}catch(error){target.textContent=error.message}
+}
+function filterPricing(event){const form=event.currentTarget,q=form.q.value.toLowerCase(),provider=form.provider.value,missing=form.missing.checked,sort=form.sort.value;let items=window.pricingCatalog.filter(x=>(!q||x.model.toLowerCase().includes(q))&&(!provider||x.provider===provider)&&(!missing||x.status==='UNKNOWN'));items.sort(sort==='input'?(a,b)=>(a.input_price_per_1m??Infinity)-(b.input_price_per_1m??Infinity):sort==='output'?(a,b)=>(a.output_price_per_1m??Infinity)-(b.output_price_per_1m??Infinity):(a,b)=>a.model.localeCompare(b.model));document.querySelector('#pricingTable').innerHTML=pricingRows(items)}
 async function importSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget,
