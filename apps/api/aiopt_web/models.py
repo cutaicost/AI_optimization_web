@@ -225,4 +225,7 @@ class PricingCatalogModel(Base):
     discovered_by_credential_id:Mapped[str|None]=mapped_column(String(36),nullable=True)
     retrieved_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
     extra_pricing_dimensions:Mapped[dict]=mapped_column(JSON,default=dict)
+    pricing_category:Mapped[str]=mapped_column(String(40),default="UNKNOWN",index=True)
+    lifecycle_status:Mapped[str]=mapped_column(String(30),default="UNKNOWN",index=True)
+    canonical_pricing_model:Mapped[str|None]=mapped_column(String(160),nullable=True)
     __table_args__=(UniqueConstraint("provider","model_id",name="uq_pricing_catalog_provider_model"),)

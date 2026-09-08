@@ -34,6 +34,14 @@ Previews classify new and unavailable models, unknown and disappeared pricing, i
 
 The signed-in `GET /api/v1/pricing` catalog normalizes primary values to USD per one million tokens. It merges provider availability, active catalog prices, and only the caller's manual overrides. Precedence is owner manual override, active imported catalog, explicitly marked built-in fallback, then unknown. Missing values remain null and render as an em dash rather than `$0.00`.
 
+## Maintained OpenAI catalog scope
+
+The reviewed canonical token catalog contains 20 exact models across GPT-6, GPT-5.6, GPT-5.5, GPT-5.4, GPT-5.2, GPT-5.1, GPT-5, GPT-4.1, GPT-4o, o3, o4-mini, and o3-mini. Each activated price links to that canonical model's official OpenAI model page. Cached-input pricing remains null where the official model page does not establish it.
+
+Ten exact documented aliases or snapshots are reviewable in `pricing_catalog.py`, including `gpt-5.6` to `gpt-5.6-sol`, dated GPT-5/5.4 snapshots, dated GPT-4o snapshots, and the dated o3 snapshot. Cost calculation consults this exact map; it never uses prefixes or fuzzy matching for price inheritance.
+
+Discovered models are independently categorized as `TEXT_REASONING`, `REALTIME`, `AUDIO`, `IMAGE`, `EMBEDDINGS`, `VIDEO`, or `UNKNOWN`, and given a `CURRENT`, `LEGACY`, or `UNKNOWN` lifecycle. Classification never creates a price. Non-text models remain unpriced until their authoritative native unit and dimensions are explicitly represented; they are not forced into text-token columns.
+
 ## Production proxy behavior
 
 `GET /api/v1/live/stream` uses same-origin cookie authentication, `text/event-stream`, five-second heartbeat comments, `Cache-Control: no-cache, no-transform`, and `X-Accel-Buffering: no`. Cloudflare and Railway must leave streaming responses unbuffered and the route timeout must exceed the intended session duration. Browser `EventSource` reconnect supplies `Last-Event-ID`; the server replays only later events belonging to the same owner. No new environment variable is required beyond `PROVIDER_CREDENTIAL_MASTER_KEY`.

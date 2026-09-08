@@ -9,6 +9,8 @@ from apps.api.aiopt_web.main import app
 from apps.api.aiopt_web.models import AuditEvent,Budget,LiveTelemetrySession,PriceOverride,PricingCatalogModel,PricingRecord,PricingRefresh,ProviderCredential,TelemetryEvent,User
 from apps.api.aiopt_web.providers import OpenAIAdapter
 from apps.api.aiopt_web.providers import ProviderError
+from apps.api.aiopt_web.cost_engine import CostCalculator
+from apps.api.aiopt_web.pricing_catalog import ALIASES,CATALOG,category,lifecycle
 import apps.api.aiopt_web.pricing_api as pricing_api
 
 PASSWORD="ValidPassword123";KEY="sk-live-sensitive-1234"
@@ -104,3 +106,22 @@ def test_stale_status_uses_documented_180_day_review_policy(client):
 
 def test_unknown_live_model_never_fabricates_cost(client):
     _owner,headers=login(client,"unknowncost");response=client.post("/api/v1/telemetry",headers=headers,json={"provider":"openai","model":"no-price-model","application":"gateway","input_tokens":10,"output_tokens":5});assert response.json()["cost"]=={"provider_recorded":None,"calculated":None,"pricing_known":False,"pricing_source":None}
+
+def test_expanded_official_catalog_exact_values_and_existing_four():
+    prices={model:(inp,out,cached) for provider,model,inp,out,cached in CATALOG if provider=="openai"};assert len(prices)>=20
+    assert prices["gpt-6-astra"]==("10","50","1");assert prices["gpt-5.6-sol"]==("4","20","0.4");assert prices["gpt-5.6-terra"]==("2","12","0.2");assert prices["gpt-5.6-luna"]==("0.2","1.2","0.02")
+    assert prices["gpt-4.1"]==("2","8","0.5");assert prices["gpt-4o"]==("2.5","10","1.25");assert prices["gpt-5-nano"]==("0.05","0.4","0.005");assert prices["o4-mini"]==("1.1","4.4","0.275")
+    assert prices["gpt-5.4-pro"][2] is None
+
+def test_exact_alias_resolution_no_fuzzy_matching_and_categories():
+    assert ALIASES["gpt-5.6"]=="gpt-5.6-sol";assert ALIASES["gpt-4o-2024-08-06"]=="gpt-4o";assert "gpt-4o-made-up" not in ALIASES
+    assert category("gpt-realtime-2")=="REALTIME";assert category("gpt-image-2")=="IMAGE";assert category("text-embedding-3-large")=="EMBEDDINGS";assert category("sora-2")=="VIDEO";assert lifecycle("gpt-4o")=="LEGACY";assert lifecycle("gpt-6-astra")=="CURRENT"
+
+def test_cost_engine_resolves_only_explicit_snapshot_alias():
+    at=datetime.now(timezone.utc)
+    with SessionLocal() as db:
+        db.add(PricingRecord(provider="openai",model="gpt-4o",effective_from=datetime(2024,1,1,tzinfo=timezone.utc),input_price=2.5,output_price=10,cached_input_price=1.25,currency="USD",provenance="official",last_verified_at=at));db.commit();calculator=CostCalculator(db)
+        assert calculator.calculate("openai","gpt-4o-2024-08-06",at,1_000_000,1_000_000).total_cost==pytest.approx(12.5);assert calculator.calculate("openai","gpt-4o-made-up",at,1,1) is None
+
+def test_admin_preview_category_lifecycle_alias_counts(client,monkeypatch):
+    discovered=[{"id":"gpt-5.6"},{"id":"gpt-realtime-2"},{"id":"gpt-4o"},{"id":"unpriced-new"}];monkeypatch.setattr(OpenAIAdapter,"_models",lambda *_:(discovered,2));_admin,headers=login(client,"countadmin","ADMIN");client.post("/api/v1/providers/openai/connect",headers=headers,json={"credential":KEY});preview=client.post("/api/v1/admin/pricing/refresh",headers=headers,json={"provider":"openai","apply":False}).json();assert preview["models_discovered"]==4;assert preview["alias_resolved_models"]==1;assert preview["non_token_models"]==1;assert preview["current_models"]==1;assert preview["legacy_models"]==1;assert set(preview["models_missing_pricing"])=={"gpt-realtime-2","unpriced-new"}

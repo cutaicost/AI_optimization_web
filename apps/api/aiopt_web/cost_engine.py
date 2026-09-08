@@ -4,6 +4,7 @@ from datetime import timezone
 from decimal import Decimal
 from sqlalchemy import or_,select
 from .models import PriceOverride,PricingRecord
+from .pricing_catalog import canonical
 
 MILLION=Decimal("1000000")
 @dataclass(frozen=True)
@@ -12,8 +13,8 @@ class CostResult:
 class CostCalculator:
     def __init__(self,db,user_id=None):self.db=db;self.user_id=user_id;self.cache={}
     def _prices(self,provider,model):
-        key=(provider.casefold(),model)
-        if key not in self.cache:self.cache[key]=self.db.scalars(select(PricingRecord).where(PricingRecord.provider==key[0],PricingRecord.model==model).order_by(PricingRecord.effective_from.desc())).all()
+        key=(provider.casefold(),canonical(model) if provider.casefold()=="openai" else model)
+        if key not in self.cache:self.cache[key]=self.db.scalars(select(PricingRecord).where(PricingRecord.provider==key[0],PricingRecord.model==key[1]).order_by(PricingRecord.effective_from.desc())).all()
         return self.cache[key]
     def calculate(self,provider,model,at,input_tokens,output_tokens,cached_input_tokens=0):
         if at.tzinfo is None:at=at.replace(tzinfo=timezone.utc)
