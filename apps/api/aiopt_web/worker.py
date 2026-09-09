@@ -84,7 +84,7 @@ def execute(job_id,executor_id):
                 db.rollback();raise
             except Exception as error:
                 logger.exception("import failed job_id=%s",job_id)
-                db.rollback();job=db.get(ImportJob,job_id);job.status="FAILED";job.failure_reason=str(error)[:500];job.rows_imported=0;job.rows_rejected=rejected;job.rejected_rows_json=examples;job.completed_at=utcnow();job.lease_expires_at=None;worker=db.get(WorkerInstance,executor_id)
+                db.rollback();job=db.get(ImportJob,job_id);job.status="FAILED";job.failure_reason=(str(error)[:500] if isinstance(error,ImportFailure) else "Import processing failed");job.rows_imported=0;job.rows_rejected=rejected;job.rejected_rows_json=examples;job.completed_at=utcnow();job.lease_expires_at=None;worker=db.get(WorkerInstance,executor_id)
                 if worker:worker.recent_failure="Import failed"
                 audit(db,"worker.import_failed",outcome="failure",actor=job.user_id,resource_type="import",resource_id=job.id);db.commit();_cleanup(job);return False
     finally:stop.set();pulse.join(timeout=2);heartbeat(executor_id,"IDLE")

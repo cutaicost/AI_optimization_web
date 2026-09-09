@@ -46,7 +46,7 @@ def test_provider_controls_are_owner_available_and_public_payload_is_sanitized(c
     assert client.get("/api/v1/providers").status_code==200
     assert client.post("/api/v1/providers/openai/connect",headers=analyst,json={"credential":KEY}).status_code==200
     assert client.get("/api/v1/providers/openai/models").status_code==200
-    payload=client.get("/api/telemetry").json();assert payload["status"]=="AVAILABLE";assert payload["usage_available"] is False;assert KEY not in str(payload);assert "masked_identifier" not in payload
+    payload=client.get("/api/telemetry").json();assert payload["status"] in {"CATALOG_AVAILABLE","CATALOG_UNAVAILABLE"};assert payload["source"]=="CATALOG";assert payload["usage_available"] is False;assert KEY not in str(payload);assert "masked_identifier" not in payload
 
 def test_encrypted_connection_persists_across_database_sessions(client,monkeypatch):
     monkeypatch.setattr(OpenAIAdapter,"_models",visible_models);headers=login(client,"restartadmin");client.post("/api/v1/providers/openai/connect",headers=headers,json={"credential":KEY})

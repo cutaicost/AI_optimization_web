@@ -13,6 +13,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY apps/api/requirements.production.txt ./apps/api/requirements.production.txt
 RUN pip install --no-cache-dir -r apps/api/requirements.production.txt \
+    && apt-get update \
+    && apt-get install --no-install-recommends -y gosu \
+    && rm -rf /var/lib/apt/lists/* \
     && addgroup --system app \
     && adduser --system --ingroup app app
 COPY apps/api ./apps/api
@@ -23,6 +26,5 @@ COPY --from=frontend-build /build/dist ./dist
 RUN chmod +x /app/scripts/start-production.sh \
     && mkdir -p /var/lib/aiopt/imports \
     && chown -R app:app /app /var/lib/aiopt
-USER app
 EXPOSE 8000
 CMD ["/app/scripts/start-production.sh"]

@@ -36,4 +36,4 @@ def authenticate(client,role):
 def test_backend_enforces_viewer_analyst_administrator_permissions(client):
     headers=authenticate(client,"VIEWER");assert client.get("/api/v1/overview").status_code==200;assert client.post("/api/v1/import/start",headers=headers,json={"filename":"x.csv","file_size":1,"format":"csv"}).status_code==403;client.cookies.clear()
     headers=authenticate(client,"ANALYST");assert client.post("/api/v1/import/start",headers=headers,json={"filename":"x.csv","file_size":1,"format":"csv"}).status_code==201;assert client.get("/api/v1/admin/system").status_code==403;assert client.post("/api/v1/integrations",headers=headers,json={"name":"x","kind":"generic"}).status_code==403;client.cookies.clear()
-    headers=authenticate(client,"ADMIN");assert client.get("/api/v1/admin/system").status_code==200;assert client.post("/api/v1/integrations",headers=headers,json={"name":"x","kind":"generic"}).status_code==201
+    headers=authenticate(client,"ADMIN");assert client.get("/api/v1/admin/system").status_code==403;assert client.post("/api/v1/integrations",headers=headers,json={"name":"x","kind":"generic"}).status_code==201

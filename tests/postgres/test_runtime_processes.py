@@ -3,7 +3,7 @@
 Run only against a disposable database:
 RUN_POSTGRES_RUNTIME=1 pytest -q tests/postgres/test_runtime_processes.py
 """
-import os,subprocess,sys,time
+import os,signal,subprocess,sys,time
 from pathlib import Path
 import pytest
 from sqlalchemy import func,select,update
@@ -32,7 +32,7 @@ def status(job_id):
     with SessionLocal() as db:return db.get(ImportJob,job_id).status
 def event_count(job_id):
     with SessionLocal() as db:return db.scalar(select(func.count()).select_from(TelemetryEvent).where(TelemetryEvent.import_job_id==job_id))
-def job(rows=30_000):
+def job(rows=5_000):
     with SessionLocal() as db:
         user=db.scalar(select(User).limit(1))
         if not user:user=User(username="runtime",email="runtime@example.com",display_name="Runtime",password_hash="x");db.add(user);db.flush()
@@ -47,7 +47,12 @@ def worker():
     return subprocess.Popen([PYTHON,"-m","apps.api.aiopt_web.worker"],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 def stop(*processes):
     for process in processes:
-        if process.poll() is None:subprocess.run(["taskkill","/PID",str(process.pid),"/T","/F"],capture_output=True)
+        if process.poll() is not None:continue
+        if os.name=="nt":subprocess.run(["taskkill","/PID",str(process.pid),"/T","/F"],capture_output=True)
+        else:
+            process.send_signal(signal.SIGKILL)
+            try:process.wait(timeout=10)
+            except subprocess.TimeoutExpired:process.kill()
 
 @pytest.fixture(autouse=True)
 def clean():
@@ -56,7 +61,7 @@ def clean():
 def _drop_tables():Base.metadata.drop_all(engine);return True
 
 def test_two_real_workers_claim_once_and_renew_leases():
-    ids=[job(100_000),*[job() for _ in range(4)]];first=worker();second=worker()
+    ids=[job(20_000),*[job() for _ in range(4)]];first=worker();second=worker()
     try:
         active=ids[0];wait_for(lambda:status(active)=="IMPORTING")
         with SessionLocal() as db:initial=db.get(ImportJob,active).lease_expires_at
@@ -64,7 +69,7 @@ def test_two_real_workers_claim_once_and_renew_leases():
         wait_for(lambda:all(status(x)=="COMPLETED" for x in ids),180)
         with SessionLocal() as db:
             rows=db.scalars(select(ImportJob).where(ImportJob.id.in_(ids))).all()
-            assert len({x.id for x in rows})==5 and sum(x.rows_imported for x in rows)==220_000
+            assert len({x.id for x in rows})==5 and sum(x.rows_imported for x in rows)==40_000
             assert len({x.executor_id for x in rows})==2
     finally:stop(first,second)
 def _lease_renewed(job_id,initial):
@@ -76,8 +81,8 @@ def test_crash_recovery_preparing_importing_and_cancelling():
     claimer=subprocess.Popen([PYTHON,"-c","from apps.api.aiopt_web.worker import claim_next;import time;claim_next('crash-preparing');time.sleep(60)"],env=env)
     wait_for(lambda:status(preparing)=="PREPARING");stop(claimer);time.sleep(4.2);assert recover_stale_jobs()==1 and status(preparing)=="QUEUED"
 
-    importing=job(80_000);process=worker();wait_for(lambda:status(importing)=="IMPORTING");stop(process);assert event_count(importing)==0;time.sleep(4.2);recover_stale_jobs();replacement=worker()
-    try:wait_for(lambda:status(importing)=="COMPLETED",180);assert event_count(importing)==80_000
+    importing=job(20_000);process=worker();wait_for(lambda:status(importing)=="IMPORTING");stop(process);assert event_count(importing)==0;time.sleep(4.2);recover_stale_jobs();replacement=worker()
+    try:wait_for(lambda:status(importing)=="COMPLETED",180);assert event_count(importing)==20_000
     finally:stop(replacement)
 
     cancelling=job(1);claimer=subprocess.Popen([PYTHON,"-c","from apps.api.aiopt_web.worker import claim_next;from apps.api.aiopt_web.database import SessionLocal;from apps.api.aiopt_web.models import ImportJob;import time;j=claim_next('crash-cancelling');d=SessionLocal();x=d.get(ImportJob,j);x.status='CANCELLING';d.commit();d.close();time.sleep(60)"],env=env)

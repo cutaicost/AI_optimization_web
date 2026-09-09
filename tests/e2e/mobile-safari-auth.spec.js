@@ -1,17 +1,10 @@
 import {test,expect} from '@playwright/test';
-
-const password='MobileSafariTest123';
+import {loginAccount} from './account-helper.js';
 
 test('mobile Safari retains and clears a first-party session',async({page,context,browserName})=>{
   test.skip(browserName!=='webkit','Mobile Safari compatibility coverage');
-  const suffix=Date.now(),username=`mobileSafari${suffix}`;
-  const registration=await context.request.post('/api/v1/auth/register',{data:{display_name:'Mobile Safari User',username,email:`${username}@example.com`,password,confirm_password:password}});
-  expect(registration.ok()).toBeTruthy();
-  await page.goto('/login');
-  await page.getByLabel('Username or Email').fill(username);
-  await page.locator('input[name="password"]').fill(password);
   const loginResponse=page.waitForResponse(response=>response.url().endsWith('/api/v1/auth/login'));
-  await page.getByRole('button',{name:'Sign In'}).click();
+  await loginAccount(page,test.info().project.name);
   const response=await loginResponse;
   expect(response.status()).toBe(200);
   expect(response.headers()['set-cookie'].toLowerCase()).toContain('samesite=lax');

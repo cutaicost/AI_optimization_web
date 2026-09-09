@@ -45,17 +45,16 @@ async function landing() {
     });
     if (response.ok) telemetry = await response.json();
   } catch {}
-  const status=telemetry?.status||'Not connected',available=status==='AVAILABLE',models=Array.isArray(telemetry?.models)?telemetry.models:[],latency=telemetry?.latency_ms;
-  const preview=`<aside class="hero-preview" aria-label="Live platform status"><div class="preview-head"><div><p class="eyebrow">LIVE PLATFORM STATUS</p><h2>OpenAI</h2></div><span class="status-dot ${available?'available':''}">${available?'Available':esc(status)}</span></div><div class="preview-metrics"><div><span>Latency</span><strong>${latency==null?'—':`${number(latency)} ms`}</strong></div><div><span>Pricing records</span><strong>${number(models.length)}</strong></div><div><span>Catalog</span><strong>${models.length?'Verified':'No records'}</strong></div></div><div class="signal-preview" aria-label="Recent public provider signal"><div class="signal-grid"></div><svg viewBox="0 0 440 72" role="img" aria-label="Provider signal visualization"><polyline points="0,45 34,44 55,30 76,48 102,42 126,43 148,22 170,49 202,44 226,38 250,42 278,41 302,26 324,46 350,42 378,43 402,35 440,42"/></svg></div><div class="preview-foot"><span>Recent activity</span><span>Token spend</span><span>Latency</span><span>Model availability</span></div><p class="preview-note">${telemetry?'Public provider status only. No organization usage is exposed.':'Provider status is currently unavailable. No customer data is shown.'}</p></aside>`;
+  const status=telemetry?.status||'Catalog unavailable',available=status==='CATALOG_AVAILABLE',models=Array.isArray(telemetry?.models)?telemetry.models:[];
+  const preview=`<aside class="hero-preview" aria-label="Public model catalog status"><div class="preview-head"><div><p class="eyebrow">PUBLIC MODEL CATALOG</p><h2>OpenAI</h2></div><span class="status-dot ${available?'available':''}">${available?'Available':esc(status)}</span></div><div class="preview-metrics"><div><span>Customer usage</span><strong>Private</strong></div><div><span>Pricing records</span><strong>${number(models.length)}</strong></div><div><span>Catalog</span><strong>${models.length?'Maintained':'No records'}</strong></div></div><div class="signal-preview" aria-label="Decorative catalog visualization"><div class="signal-grid"></div><svg viewBox="0 0 440 72" role="img" aria-label="Catalog visualization"><polyline points="0,45 34,44 55,30 76,48 102,42 126,43 148,22 170,49 202,44 226,38 250,42 278,41 302,26 324,46 350,42 378,43 402,35 440,42"/></svg></div><div class="preview-foot"><span>Pricing evidence</span><span>Model catalog</span><span>Private telemetry</span><span>Availability metadata</span></div><p class="preview-note">${telemetry?'Public catalog metadata only. No customer connection or organization usage is exposed.':'Catalog status is currently unavailable. No customer data is shown.'}</p></aside>`;
   return `${publicHeader()}<main id="main" class="landing-page"><section class="landing-container landing-hero"><div class="hero-copy"><p class="eyebrow">AI TELEMETRY & FINOPS</p><h1>Understand every token.<br><span>Optimize every decision.</span></h1><p class="lede">AI cost intelligence, live telemetry, model pricing, forecasting, and quality-constrained optimization in one secure platform.</p><div class="hero-actions"><a href="/book-demo" data-route class="button primary">Book a Consultation</a><a href="/signup" data-route class="button">Sign Up Request</a></div><p class="hero-note">Meet with our team or request private platform access.</p></div>${preview}</section><section id="product" class="landing-container primary-capabilities" aria-label="Primary platform capabilities">${[
     ['AI Cost Intelligence','Track token usage, pricing, budgets, and spend.'],['Live Telemetry','Observe model performance, latency, tokens, and cost signals.'],['Optimization','Identify cost opportunities while respecting quality requirements.']
   ].map(([title,text],index)=>`<article><span class="feature-number">0${index+1}</span><h2>${title}</h2><p>${text}</p></article>`).join('')}</section><section class="secondary-section"><div class="landing-container"><header class="section-intro"><p class="eyebrow">A COMPLETE OPERATING VIEW</p><h2>From usage signal to financial decision.</h2></header><div class="secondary-features">${[
     ['Forecasting','Model future exposure from observed trends.'],['Operational Signals','Surface anomalies and reliability evidence.'],['Enterprise Analytics','Maintain an auditable ownership-aware view.'],['Model Pricing','Compare maintained model economics.'],['Reports','Share clear operational assessments.'],['Budgets','Set accountable spend guardrails.']
   ].map(([title,text])=>`<article><h3>${title}</h3><p>${text}</p></article>`).join('')}</div></div></section><section class="landing-container demo-showcase"><div><p class="eyebrow">PLATFORM ACCESS</p><h2>Want access to the platform?</h2><p>Submit a Sign Up Request and we’ll contact you directly about onboarding, account setup, and how you plan to use CutAIcost.</p><p class="demo-proof">Submitting a request <span>does not automatically create an account.</span></p></div><a href="/signup" data-route class="button">Sign Up Request</a></section><section class="landing-container demo-showcase"><div><p class="eyebrow">OWNER-LED REVIEW</p><h2>Want to walk through it with us first?</h2><p>Book a consultation with a CutAICost owner to discuss your AI environment, costs, telemetry, forecasting, and optimization.</p></div><a href="/book-demo" data-route class="button primary">Book a Consultation</a></section></main><footer class="public-footer"><div class="landing-container">Private by design · Quality-constrained optimization · v0.2.0</div></footer>`;
 }
-function authPage(kind) {
-  const register = kind === 'signup' || kind === 'register';
-  return `${publicHeader()}<main id="main" class="auth-layout"><section class="auth-card"><p class="eyebrow">${register ? 'CREATE ACCOUNT' : 'WELCOME BACK'}</p><h1>${register ? 'Sign up for CutAIcost' : 'Sign in to your workspace'}</h1><form id="authForm">${register ? `<label>Full Name<input name="display_name" autocomplete="name" maxlength="100" required></label><label>Username<input name="username" autocomplete="username" minlength="3" maxlength="40" pattern="[A-Za-z0-9_.-]+" required></label><label>Email<input name="email" type="email" autocomplete="email" maxlength="320" required></label><label>Company / Organization <span>Optional</span><input name="organization" autocomplete="organization" maxlength="120"></label>` : `<label>Username or Email<input name="identity" autocomplete="username" maxlength="320" required autofocus></label>`}<label>Password<div class="password-field"><input name="password" type="password" autocomplete="${register ? 'new-password' : 'current-password'}" ${register ? 'minlength="12"' : ''} maxlength="128" required><button type="button" data-toggle-password aria-label="Show password">Show</button></div></label>${register ? `<p class="help">Use 12+ characters with uppercase, lowercase, and a number.</p><label>Confirm Password<input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>` : ''}<button class="button primary submit" type="submit">${register ? 'Sign Up' : 'Log In'}</button><p id="formStatus" role="alert" aria-live="polite"></p></form><p>${register ? 'Already have an account?' : 'New to CutAIcost?'} <a href="${register ? '/login' : '/signup'}" data-route>${register ? 'Log In' : 'Sign Up'}</a></p></section></main>`;
+function authPage() {
+  return `${publicHeader()}<main id="main" class="auth-layout"><section class="auth-card"><p class="eyebrow">WELCOME BACK</p><h1>Sign in to your workspace</h1><form id="authForm"><label>Username or Email<input name="identity" autocomplete="username" maxlength="320" required autofocus></label><label>Password<div class="password-field"><input name="password" type="password" autocomplete="current-password" maxlength="128" required><button type="button" data-toggle-password aria-label="Show password">Show</button></div></label><button class="button primary submit" type="submit">Log In</button><p id="formStatus" role="alert" aria-live="polite"></p></form><p>New to CutAIcost? <a href="/signup" data-route>Sign Up Request</a></p></section></main>`;
 }
 const navItems = [
   ['Overview', '/app/overview'],
@@ -77,8 +76,8 @@ function shell(content, admin = false) {
   return `<aside class="sidebar"><a href="/app/overview" data-route class="brand">CutAIcost</a><nav aria-label="Application navigation">${navItems.map(([label, path]) => `<a href="${path}" data-route ${location.pathname===path?'aria-current="page"':''}>${label}</a>`).join('')}${canAdmin(currentUser) ? `<a href="/admin" data-route ${location.pathname.startsWith('/admin')?'aria-current="page"':''}>Administration</a>` : ''}</nav><div class="account"><a href="/app/profile" data-route>${esc(currentUser.display_name)}</a><button data-logout>Log out</button></div></aside><main id="main" class="workspace">${content}</main>`;
 }
 const heading = (title, subtitle) => `<header class="page-head"><p class="eyebrow">${currentUser.organization ? esc(currentUser.organization) : 'YOUR WORKSPACE'}</p><h1>${title}</h1><p>${subtitle}</p></header>`;
-const adminItems=[['Overview','/admin'],['Members','/admin/members'],['Organization','/admin/organization'],['Providers','/admin/providers'],['Membership','/admin/membership'],['Usage','/admin/usage'],['Budgets','/admin/budgets'],['Pricing','/admin/pricing'],['Data & Privacy','/admin/data-privacy'],['Security','/admin/security'],['Audit Log','/admin/audit'],['Notifications','/admin/notifications'],['System','/admin/system']];
-const adminNav=()=>`<nav class="admin-nav" aria-label="Administration sections">${adminItems.map(([label,path])=>`<a href="${path}" data-route ${location.pathname===path?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
+const adminItems=()=>[['Overview','/admin'],['Members','/admin/members'],['Organization','/admin/organization'],['Providers','/admin/providers'],['Membership','/admin/membership'],['Usage','/admin/usage'],['Budgets','/admin/budgets'],...(currentUser?.is_platform_admin?[['Pricing','/admin/pricing']]:[]),['Data & Privacy','/admin/data-privacy'],['Security','/admin/security'],['Audit Log','/admin/audit'],['Notifications','/admin/notifications'],['System','/admin/system'],...(currentUser?.is_platform_admin?[['Users','/admin/users']]:[])];
+const adminNav=()=>`<nav class="admin-nav" aria-label="Administration sections">${adminItems().map(([label,path])=>`<a href="${path}" data-route ${location.pathname===path?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
 const adminShell=(title,subtitle,content)=>shell(`${heading(title,subtitle)}${adminNav()}${content}`,true);
 async function overview() {
   const data = await api('/overview'),
@@ -214,11 +213,12 @@ async function render() {
   }
   if (routes.public.has(path)) {
     if (currentUser && path !== '/') return navigate(authenticatedHome(currentUser));
-    app.innerHTML = path === '/' ? await landing() : authPage(path.slice(1)).replace('>Sign Up</a>','>Sign Up Request</a>');
+    app.innerHTML = path === '/' ? await landing() : authPage();
     return wire();
   }
   if (!currentUser) return navigate('/login');
   if (routes.admin.has(path) && !canAdmin(currentUser)) return navigate('/app/overview');
+  if (['/admin/pricing','/admin/users'].includes(path) && !currentUser.is_platform_admin) return navigate('/admin');
   try {
     if (path === '/app' || path === '/app/overview') app.innerHTML = await overview();
     else if (path === '/app/usage') app.innerHTML = await usage();
@@ -328,20 +328,12 @@ async function authSubmit(event) {
   button.disabled = true;
   status.textContent = '';
   try {
-    if (location.pathname === '/signup' || location.pathname === '/register') {
-      await api('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-      navigate('/login');
-    } else {
-      const result = await api('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-      currentUser = result.user;
-      navigate(result.redirect_to || authenticatedHome(result.user));
-    }
+    const result = await api('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    currentUser = result.user;
+    navigate(result.redirect_to || authenticatedHome(result.user));
   } catch (error) {
     status.textContent = error.message;
     button.disabled = false;

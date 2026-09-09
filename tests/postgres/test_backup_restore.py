@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 if os.getenv("RUN_POSTGRES_BACKUP")!="1":pytest.skip("opt-in PostgreSQL backup test",allow_module_level=True)
 from apps.api.aiopt_web.models import AuditEvent,Budget,CloudProviderConfig,EnterpriseSetting,ImportJob,Integration,ModelEvaluation,PriceOverride,TelemetryEvent,User
 from apps.api.aiopt_web.security import utcnow
-URL=os.environ["DATABASE_URL"];SCRIPT=Path(__file__).resolve().parents[2]/"scripts"/"postgres-backup.py"
+URL=os.environ["DATABASE_URL"].replace("postgresql://","postgresql+psycopg://",1);SCRIPT=Path(__file__).resolve().parents[2]/"scripts"/"postgres-backup.py"
 os.environ.setdefault("BACKUP_ENCRYPTION_KEY",base64.urlsafe_b64encode(os.urandom(32)).decode())
 def run(*args,check=True):return subprocess.run([sys.executable,str(SCRIPT),*map(str,args)],env=os.environ,capture_output=True,text=True,check=check)
 def counts(engine):

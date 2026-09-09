@@ -7,7 +7,7 @@ from fastapi import APIRouter,Depends,HTTPException,Query
 from pydantic import BaseModel,ConfigDict,Field
 from sqlalchemy import select,text
 from sqlalchemy.orm import Session
-from .auth import audit,require_admin,require_csrf,require_operational_user
+from .auth import audit,require_csrf,require_operational_user,require_platform_admin
 from .config import settings
 from .database import SessionLocal,db_session,engine
 from .models import ModelCapabilityEvidence,ModelSkill,PriceOverride,PricingCatalogModel,PricingRecord,PricingRefresh,ProviderCredential,User
@@ -23,11 +23,13 @@ SOURCE="https://developers.openai.com/api/docs/models/compare";MODEL_SOURCE="htt
 SOURCE_LABEL="OpenAI Official Pricing Documentation";STALE_AFTER_DAYS=180
 _refresh_lock=threading.Lock();_LOCK_ID=17420361
 def _acquire_refresh(db):
-    if engine.dialect.name=="postgresql":return bool(db.scalar(text("SELECT pg_try_advisory_lock(:id)"),{"id":_LOCK_ID}))
+    # Transaction-scoped locks are released by PostgreSQL on commit/rollback.
+    # A session-scoped lock can survive an endpoint commit when SQLAlchemy
+    # returns that connection to the pool before dependency cleanup runs.
+    if engine.dialect.name=="postgresql":return bool(db.scalar(text("SELECT pg_try_advisory_xact_lock(:id)"),{"id":_LOCK_ID}))
     return _refresh_lock.acquire(blocking=False)
 def _release_refresh(db):
-    if engine.dialect.name=="postgresql":db.execute(text("SELECT pg_advisory_unlock(:id)"),{"id":_LOCK_ID})
-    elif _refresh_lock.locked():_refresh_lock.release()
+    if engine.dialect.name!="postgresql" and _refresh_lock.locked():_refresh_lock.release()
 def refresh_guard(db:Session=Depends(db_session)):
     if not _acquire_refresh(db):raise HTTPException(409,"Refresh already in progress.")
     try:yield
@@ -108,7 +110,7 @@ def failed_refresh(db,user,provider,row,message,status):
     db.add(PricingRefresh(admin_user_id=user.id,source=SOURCE,provider=provider,provider_credential_id=row.id if row else None,providers_checked=1,success=False,validation_errors=[message],source_type="MANUAL_MAINTAINED_CATALOG"));audit(db,"pricing.refresh_failed",outcome="failure",actor=user.id,resource_type="pricing",provider=provider,status=status);db.commit()
 
 @router.get("")
-def history(user:User=Depends(require_admin),db:Session=Depends(db_session)):
+def history(user:User=Depends(require_platform_admin),db:Session=Depends(db_session)):
     rows=db.scalars(select(PricingRefresh).order_by(PricingRefresh.created_at.desc()).limit(10)).all();connections={x.provider:x for x in db.scalars(select(ProviderCredential).where(ProviderCredential.user_id==user.id)).all()}
     last_discovery=db.scalar(select(PricingCatalogModel.retrieved_at).where(PricingCatalogModel.provider=="openai").order_by(PricingCatalogModel.retrieved_at.desc()).limit(1))
     providers=[{"provider":"openai","credential_status":connections["openai"].validation_status if "openai" in connections else "NOT_CONFIGURED","masked_identifier":connections["openai"].masked_identifier if "openai" in connections else None,"model_catalog_source":"AUTHENTICATED_PROVIDER_API","pricing_source_type":"MANUAL_MAINTAINED_CATALOG","pricing_source":SOURCE,"pricing_source_label":SOURCE_LABEL,"last_pricing_review":REVIEWED_AT,"last_model_discovery":last_discovery,"stale_after_days":STALE_AFTER_DAYS}]
@@ -118,7 +120,7 @@ def history(user:User=Depends(require_admin),db:Session=Depends(db_session)):
     return {"last_successful_refresh":next((x.created_at for x in rows if x.success),None),"schedule":{"enabled":cfg.model_refresh_enabled,"hour":cfg.model_refresh_hour,"next_run":next_run if cfg.model_refresh_enabled else None},"providers":providers,"items":[{"timestamp":x.created_at,"provider":x.provider,"provider_credential_id":x.provider_credential_id,"models_retrieved":x.models_retrieved,"prices_retrieved":x.prices_retrieved,"models_changed":x.models_changed,"models_added":x.models_added,"success":x.success,"source_type":x.source_type,"validation_errors":x.validation_errors} for x in rows],"capabilities":capability_admin_data(db)}
 
 @router.post("/refresh",dependencies=[Depends(require_csrf),Depends(refresh_guard)])
-def refresh(payload:RefreshIn,user:User=Depends(require_admin),db:Session=Depends(db_session)):
+def refresh(payload:RefreshIn,user:User=Depends(require_platform_admin),db:Session=Depends(db_session)):
     provider=payload.provider.casefold();row=admin_connection(db,user,provider)
     if not row:failed_refresh(db,user,provider,None,"Admin provider credential is not configured","NOT_CONFIGURED");raise HTTPException(409,f"Admin credential for {provider} is not configured")
     try:models=discover(row);all_prices=validate_prices(provider)
@@ -151,12 +153,15 @@ def run_scheduled_refresh_if_due(now=None):
         try:
             credential=db.scalar(select(ProviderCredential).where(ProviderCredential.provider=="openai",ProviderCredential.validation_status=="CONNECTED").order_by(ProviderCredential.updated_at.desc()))
             admin=db.get(User,credential.user_id) if credential else None
-            if not admin or admin.role!="ADMIN":return False
+            if not admin or admin.role!="ADMIN" or not admin.is_platform_admin:return False
             result=refresh(RefreshIn(provider="openai",apply=True,confirm_anomalies=False),admin,db)
             row=db.scalar(select(PricingRefresh).order_by(PricingRefresh.created_at.desc()).limit(1))
             if row:row.source_type="SCHEDULED";db.commit()
             return result
-        except HTTPException:return False
+        except HTTPException:
+            row=db.scalar(select(PricingRefresh).where(PricingRefresh.admin_user_id==admin.id).order_by(PricingRefresh.created_at.desc()).limit(1)) if 'admin' in locals() and admin else None
+            if row:row.source_type="SCHEDULED";db.commit()
+            return False
         finally:_release_refresh(db)
 
 @public_router.get("")

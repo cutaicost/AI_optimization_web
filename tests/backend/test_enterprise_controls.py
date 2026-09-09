@@ -13,7 +13,7 @@ def clean():Base.metadata.drop_all(engine);Base.metadata.create_all(engine);yiel
 @pytest.fixture
 def client():
     with TestClient(app) as value:
-        with SessionLocal() as db:db.add(User(username="controladmin",email="control@example.com",display_name="Control",password_hash=hash_password(PASSWORD),role="ADMIN"));db.commit()
+        with SessionLocal() as db:db.add(User(username="controladmin",email="control@example.com",display_name="Control",password_hash=hash_password(PASSWORD),role="ADMIN",is_platform_admin=True));db.commit()
         value.post("/api/v1/auth/login",json={"identity":"controladmin","password":PASSWORD});yield value
 def csrf(client):return {"X-CSRF-Token":client.cookies.get(CSRF_COOKIE)}
 def seed():
@@ -27,3 +27,9 @@ def test_audit_and_diagnostics_exports_are_safe(client):
     seed();json_export=client.get("/api/v1/admin/audit/export.json");csv_export=client.get("/api/v1/admin/audit/export.csv");diagnostics=client.get("/api/v1/admin/system/export");assert json_export.status_code==csv_export.status_code==diagnostics.status_code==200;combined=json_export.text+csv_export.text+diagnostics.text
     for forbidden in ("SESSION_SECRET","OIDC_CLIENT_SECRET","postgresql+psycopg://"):assert forbidden not in combined
     assert "frontend_version" in diagnostics.json() and "storage" in diagnostics.json()
+
+def test_non_platform_admin_cannot_apply_global_retention(client):
+    with SessionLocal() as db:
+        user=db.scalar(select(User).where(User.username=="controladmin"));user.is_platform_admin=False;db.commit()
+    assert client.get("/api/v1/admin/retention/preview?days=90").status_code==403
+    assert client.post("/api/v1/admin/retention",headers=csrf(client),json={"days":90}).status_code==403

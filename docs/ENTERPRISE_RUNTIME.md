@@ -36,4 +36,5 @@ The standard backend suite uses SQLite. Set a PostgreSQL `DATABASE_URL` before t
 
 - SQLite cannot persist fine-grained progress while the telemetry transaction holds its single-writer lock.
 - The included backend is filesystem-based. Multi-host deployments must point `IMPORT_STORAGE_ROOT` at network/shared storage or add an object-storage implementation of `ImportStorage`.
+- Production startup requires both `IMPORT_STORAGE_ROOT` and `IMPORT_STORAGE_PERSISTENT=true`. Set the flag only after attaching a persistent shared Railway volume; it is an explicit deployment acknowledgement, not a substitute for the volume.
 - PostgreSQL high-availability/failover behavior beyond single-server restart remains an infrastructure-specific production gate.

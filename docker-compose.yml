@@ -18,6 +18,7 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       IMPORT_STORAGE_ROOT: /var/lib/aiopt/imports
+      IMPORT_STORAGE_PERSISTENT: "true"
     volumes: [import-data:/var/lib/aiopt/imports]
     depends_on: {postgres: {condition: service_healthy}}
     healthcheck: {test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"], interval: 10s, timeout: 5s, retries: 10, start_period: 15s}
@@ -30,6 +31,7 @@ services:
       DATABASE_URL: postgresql+psycopg://aioptimization:${POSTGRES_PASSWORD}@postgres/aioptimization
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
       IMPORT_STORAGE_ROOT: /var/lib/aiopt/imports
+      IMPORT_STORAGE_PERSISTENT: "true"
     volumes: [import-data:/var/lib/aiopt/imports]
     depends_on: {api: {condition: service_healthy}}
     healthcheck: {test: ["CMD-SHELL", "kill -0 1"], interval: 15s, timeout: 5s, retries: 3}

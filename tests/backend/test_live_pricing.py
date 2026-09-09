@@ -22,7 +22,7 @@ def client():
     with TestClient(app) as value:yield value
 def login(client,name,role="ANALYST"):
     client.post("/api/v1/auth/register",json={"display_name":name,"username":name,"email":f"{name}@example.com","password":PASSWORD,"confirm_password":PASSWORD})
-    with SessionLocal() as db:user=db.scalar(select(User).where(User.username==name));user.role=role;db.commit();user_id=user.id
+    with SessionLocal() as db:user=db.scalar(select(User).where(User.username==name));user.role=role;user.is_platform_admin=role=="ADMIN";db.commit();user_id=user.id
     client.post("/api/v1/auth/login",json={"identity":name,"password":PASSWORD});return user_id,{"X-CSRF-Token":client.cookies.get(CSRF_COOKIE)}
 def models(_self,_key):return ([{"id":"gpt-5.6-luna","created":1_700_000_000,"owned_by":"openai"}],4.5)
 

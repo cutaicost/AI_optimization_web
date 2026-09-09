@@ -79,7 +79,7 @@ def analyze_import(import_id:str,user:User=Depends(require_analyst),db:Session=D
         return {"import":job_json(job),"columns":headers,"suggested_mapping":job.mapping}
     except Exception as error:
         logger.exception("import analysis failed job_id=%s",job.id)
-        db.rollback();job=owned_job(db,user,import_id);job.status="FAILED";job.failure_reason=str(error)[:500];job.completed_at=utcnow();audit(db,"import.failed",outcome="failure",actor=user.id,resource_type="import",resource_id=job.id,reason=job.failure_reason);db.commit();unlink(job)
+        db.rollback();job=owned_job(db,user,import_id);job.status="FAILED";job.failure_reason=(str(error)[:500] if isinstance(error,ImportFailure) else "The file could not be analyzed");job.completed_at=utcnow();audit(db,"import.failed",outcome="failure",actor=user.id,resource_type="import",resource_id=job.id,reason=job.failure_reason);db.commit();unlink(job)
         raise HTTPException(400,"The file could not be analyzed")
 
 @router.get("/import/{import_id}/status")

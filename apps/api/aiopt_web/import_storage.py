@@ -31,9 +31,15 @@ class LocalFileImportStorage(ImportStorage):
     """Filesystem implementation suitable for one host or a shared volume."""
     def __init__(self,root:Path|str|None=None):
         configured=root or os.getenv("IMPORT_STORAGE_ROOT") or os.getenv("IMPORT_TEMP_DIR")
+        production=os.getenv("APP_ENV","").lower()=="production"
+        if production and not configured:raise RuntimeError("IMPORT_STORAGE_ROOT is required in production")
+        if production and os.getenv("IMPORT_STORAGE_PERSISTENT","").lower()!="true":raise RuntimeError("Production import storage requires a persistent shared volume; set IMPORT_STORAGE_PERSISTENT=true after attaching it")
         self.root=Path(configured) if configured else Path(tempfile.gettempdir())/"aiopt-web-imports"
         self.root.mkdir(mode=0o700,parents=True,exist_ok=True)
         if self.root.is_symlink():raise RuntimeError("Import storage is unavailable")
+        probe=self.root/f".write-test-{os.getpid()}"
+        try:probe.touch(exist_ok=False);probe.unlink()
+        except OSError as error:raise RuntimeError("Import storage is not writable") from error
     def _path(self,reference,suffix=".upload"):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}",reference or ""):raise ValueError("Invalid import storage reference")
         return self.root/f"{reference}{suffix}"

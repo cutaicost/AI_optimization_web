@@ -8,6 +8,7 @@ from sqlalchemy.schema import CreateTable
 from apps.api.aiopt_web.auth import CSRF_COOKIE,SESSION_COOKIE,bootstrap_admins
 from apps.api.aiopt_web.database import Base,SessionLocal,engine
 from apps.api.aiopt_web.main import app
+import apps.api.aiopt_web.main as main_module
 from apps.api.aiopt_web.models import Session as UserSession,TelemetryEvent,User
 from apps.api.aiopt_web.security import utcnow,verify_password
 
@@ -39,6 +40,11 @@ def test_registration_rejects_duplicates_malformed_and_password_mismatch(client)
     assert client.post("/api/v1/auth/register",json={"display_name":"X","username":"other","email":"bad","password":PASSWORD,"confirm_password":PASSWORD}).status_code==422
     assert client.post("/api/v1/auth/register",json={"display_name":"X","username":"other","email":"other@example.com","password":PASSWORD,"confirm_password":"DifferentPassword123"}).status_code==422
     assert register(client,"Sith","reserved@example.com").status_code==409
+
+def test_production_self_registration_is_closed_by_default(client,monkeypatch):
+    monkeypatch.setattr(main_module,"cfg",main_module.cfg.__class__(**{**main_module.cfg.__dict__,"environment":"production"}))
+    monkeypatch.delenv("SELF_REGISTRATION_ENABLED",raising=False)
+    assert register(client).status_code==404
 
 def test_login_session_me_logout_and_csrf(client):
     register(client);result=login(client);assert result.status_code==200;assert result.json()["redirect_to"]=="/app/overview";assert client.cookies.get(SESSION_COOKIE);assert client.cookies.get(CSRF_COOKIE)
@@ -98,7 +104,7 @@ def test_admin_page_requires_admin_session(client):
     register(client);login(client);assert client.get("/admin",follow_redirects=False).status_code in {200,404}
     with SessionLocal() as db:user=db.scalar(select(User).where(User.username=="ordinary"));user.role="ADMIN";db.commit()
     assert client.get("/admin",follow_redirects=False).status_code in {200,404}
-    assert client.get("/api/v1/admin/system").status_code==200
+    assert client.get("/api/v1/admin/system").status_code==403
 
 def test_user_data_isolation_and_owner_scoped_reset(client):
     register(client,"first","first@example.com");login(client,"first");assert client.post("/api/v1/telemetry",headers=csrf(client),json={"provider":"p","model":"m","application":"a","input_tokens":10}).status_code==201

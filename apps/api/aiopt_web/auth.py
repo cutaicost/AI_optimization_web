@@ -1,6 +1,6 @@
 from datetime import timedelta
 from hashlib import sha256
-import os
+import os,secrets
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -56,7 +56,7 @@ def require_csrf(request:Request,db:Session=Depends(db_session)):
     if not session:raise HTTPException(401,"Authentication required")
     supplied=request.headers.get("X-CSRF-Token","")
     cookie=request.cookies.get(CSRF_COOKIE,"")
-    if not supplied or not cookie or supplied!=cookie or digest(supplied)!=session.csrf_hash:raise HTTPException(403,"CSRF validation failed")
+    if not supplied or not cookie or not secrets.compare_digest(supplied,cookie) or not secrets.compare_digest(digest(supplied),session.csrf_hash):raise HTTPException(403,"CSRF validation failed")
 
 def login_limited(db:Session,identity:str):
     key=sha256(identity.casefold().encode()).hexdigest();cutoff=utcnow()-timedelta(minutes=15)

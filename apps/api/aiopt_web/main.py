@@ -3,14 +3,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import monotonic
 import json,secrets,logging
-import os,threading,time
+import os,socket,threading,time
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import case, delete, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from .auth import CSRF_COOKIE,SESSION_COOKIE,audit,bootstrap_admins,create_session,current_session,enforce_rate_limit,login_limited,public_user,public_user_context,require_admin,require_analyst,require_csrf,require_operational_user,require_user
+from .auth import CSRF_COOKIE,SESSION_COOKIE,audit,bootstrap_admins,create_session,current_session,enforce_rate_limit,login_limited,public_user,public_user_context,require_admin,require_analyst,require_csrf,require_operational_user,require_platform_admin,require_user
 from .config import VERSION,settings
 from .database import Base,SessionLocal,db_session,engine
 from .models import AuditEvent,ImportJob,LoginAttempt,Organization,OrganizationMember,Session as UserSession,TelemetryEvent,User,WorkerInstance
@@ -47,10 +47,15 @@ async def lifespan(_):
     if cfg.environment=="test" or os.getenv("EMBEDDED_IMPORT_WORKER")=="true":
         from .worker import process_next,recover_stale_jobs
         recovered=recover_stale_jobs();logger.info("import startup recovery complete recovered=%s",recovered)
+        worker_id=f"embedded-{socket.gethostname()[:40]}-{os.getpid()}"
         def work():
+            last_model_refresh_check=0.0
             while not stop.is_set():
                 try:
-                    if process_next("embedded-worker") is None:stop.wait(.05)
+                    if monotonic()-last_model_refresh_check>=60:
+                        from .pricing_api import run_scheduled_refresh_if_due
+                        run_scheduled_refresh_if_due();last_model_refresh_check=monotonic()
+                    if process_next(worker_id) is None:stop.wait(.05)
                 except Exception:
                     logger.exception("embedded import worker iteration failed")
                     try:recover_stale_jobs()
@@ -80,6 +85,8 @@ async def security_headers(request:Request,call_next):
     response=await call_next(request)
     headers={"X-Content-Type-Options":"nosniff","X-Frame-Options":"DENY","Referrer-Policy":"strict-origin-when-cross-origin","Permissions-Policy":"camera=(), microphone=(), geolocation=()","Content-Security-Policy":"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"}
     for key,value in headers.items():response.headers[key]=value
+    if cfg.environment=="production":response.headers["Strict-Transport-Security"]="max-age=31536000; includeSubDomains"
+    if request.url.path.startswith("/api/v1/auth/"):response.headers["Cache-Control"]="no-store"
     return response
 
 def set_session_cookies(response:Response,raw:str,csrf:str):
@@ -100,6 +107,8 @@ def deployment_health(db:Session=Depends(db_session)):
 
 @app.post("/api/v1/auth/register",status_code=201)
 def register(payload:RegisterIn,request:Request,db:Session=Depends(db_session)):
+    if cfg.environment=="production" and os.getenv("SELF_REGISTRATION_ENABLED","false").lower()!="true":
+        raise HTTPException(404,"Not Found")
     enforce_rate_limit(db,"registration",request.client.host if request.client else "unknown",10,60)
     username=payload.username.casefold();email=str(payload.email).casefold()
     if username in {"sith","beyond"}:
@@ -192,26 +201,26 @@ def clear_telemetry(user:User=Depends(require_operational_user),db:Session=Depen
     return {"deleted":count,"imports_deleted":len(jobs),"forecasts_deleted":forecasts}
 
 @app.get("/api/v1/admin/summary")
-def admin_summary(_:User=Depends(require_admin),db:Session=Depends(db_session)):
+def admin_summary(_:User=Depends(require_platform_admin),db:Session=Depends(db_session)):
     total=db.scalar(select(func.count()).select_from(User)) or 0;active=db.scalar(select(func.count()).select_from(User).where(User.is_active.is_(True))) or 0
     admins=db.scalar(select(func.count()).select_from(User).where(User.role=="ADMIN")) or 0
     recent=db.scalars(select(AuditEvent).order_by(AuditEvent.timestamp.desc()).limit(5)).all()
     return {"users":{"total":total,"active":active,"disabled":total-active,"admins":admins},"telemetry":db.scalar(select(func.count()).select_from(TelemetryEvent)) or 0,"recent_imports":db.scalar(select(func.count()).select_from(ImportJob)) or 0,"audit_events":db.scalar(select(func.count()).select_from(AuditEvent)) or 0,"recent_audit":[{"timestamp":r.timestamp,"action":r.action,"outcome":r.outcome} for r in recent],"health":"healthy","version":VERSION}
 
 @app.get("/api/v1/admin/users")
-def admin_users(q:str="",limit:int=Query(50,ge=1,le=200),offset:int=Query(0,ge=0),_:User=Depends(require_admin),db:Session=Depends(db_session)):
+def admin_users(q:str="",limit:int=Query(50,ge=1,le=200),offset:int=Query(0,ge=0),_:User=Depends(require_platform_admin),db:Session=Depends(db_session)):
     query=select(User)
     if q:query=query.where(or_(User.username.ilike(f"%{q}%"),User.email.ilike(f"%{q}%"),User.display_name.ilike(f"%{q}%")))
     rows=db.scalars(query.order_by(User.created_at.desc()).offset(offset).limit(limit+1)).all();return {"items":[public_user(row) for row in rows[:limit]],"limit":limit,"offset":offset,"has_more":len(rows)>limit}
 
 @app.get("/api/v1/admin/users/{user_id}")
-def admin_user(user_id:str,_:User=Depends(require_admin),db:Session=Depends(db_session)):
+def admin_user(user_id:str,_:User=Depends(require_platform_admin),db:Session=Depends(db_session)):
     target=db.get(User,user_id)
     if not target:raise HTTPException(404,"User not found")
     return {"user":public_user(target)}
 
 @app.patch("/api/v1/admin/users/{user_id}",dependencies=[Depends(require_csrf)])
-def admin_update_user(user_id:str,payload:AdminUserUpdateIn,admin:User=Depends(require_admin),db:Session=Depends(db_session)):
+def admin_update_user(user_id:str,payload:AdminUserUpdateIn,admin:User=Depends(require_platform_admin),db:Session=Depends(db_session)):
     target=db.get(User,user_id)
     if not target:raise HTTPException(404,"User not found")
     removing_admin=target.role=="ADMIN" and ((payload.role and payload.role!="ADMIN") or payload.is_active is False)
@@ -224,7 +233,7 @@ def admin_update_user(user_id:str,payload:AdminUserUpdateIn,admin:User=Depends(r
     audit(db,"admin.user_updated",actor=admin.id,resource_type="user",resource_id=target.id,role=target.role,is_active=target.is_active);db.commit();return {"user":public_user(target)}
 
 @app.get("/api/v1/admin/audit")
-def admin_audit(q:str="",action:str="",outcome:str="",limit:int=Query(100,ge=1,le=500),offset:int=Query(0,ge=0),_:User=Depends(require_admin),db:Session=Depends(db_session)):
+def admin_audit(q:str="",action:str="",outcome:str="",limit:int=Query(100,ge=1,le=500),offset:int=Query(0,ge=0),_:User=Depends(require_platform_admin),db:Session=Depends(db_session)):
     query=select(AuditEvent)
     if q:query=query.where(or_(AuditEvent.action.ilike(f"%{q}%"),AuditEvent.resource_type.ilike(f"%{q}%"),AuditEvent.resource_id.ilike(f"%{q}%")))
     if action:query=query.where(AuditEvent.action==action)
@@ -232,7 +241,7 @@ def admin_audit(q:str="",action:str="",outcome:str="",limit:int=Query(100,ge=1,l
     rows=db.scalars(query.order_by(AuditEvent.timestamp.desc()).offset(offset).limit(limit+1)).all();return {"items":[{"id":r.id,"timestamp":r.timestamp,"actor_user_id":r.actor_user_id,"action":r.action,"outcome":r.outcome,"resource_type":r.resource_type,"resource_id":r.resource_id,"metadata":r.metadata_json} for r in rows[:limit]],"limit":limit,"offset":offset,"has_more":len(rows)>limit}
 
 @app.get("/api/v1/admin/system")
-def admin_system(_:User=Depends(require_admin),db:Session=Depends(db_session)):
+def admin_system(_:User=Depends(require_platform_admin),db:Session=Depends(db_session)):
     return system_data(db)
 def system_data(db):
     db.execute(text("SELECT 1"))
@@ -244,7 +253,7 @@ def system_data(db):
     return {"frontend_version":VERSION,"backend_version":VERSION,"application_version":VERSION,"api_version":"v1","schema_version":migration,"migration":migration,"database_type":engine.dialect.name,"database_health":"connected","database":"connected","environment":cfg.environment,"uptime_seconds":round(monotonic()-STARTED,2),"runtime_mode":os.getenv("RUNTIME_MODE","server"),"rbac_mode":"OIDC claims" if cfg.oidc_issuer else "local roles","oidc_enabled":bool(cfg.oidc_issuer and cfg.oidc_client_id),"storage":{"type":type(storage).__name__,"root":str(getattr(storage,"root","deployment-managed"))},"user_count":db.scalar(select(func.count()).select_from(User)) or 0,"telemetry_rows":db.scalar(select(func.count()).select_from(TelemetryEvent)) or 0,"forecast_runs":db.scalar(select(func.count()).select_from(ForecastRun)) or 0,"worker":{"status":"working" if running else "idle-or-offline","queued":queued,"running":running,"cancelling":cancelling,"active_workers":sum(aware(w.last_heartbeat_at)>=cutoff and w.status!="OFFLINE" for w in workers),"stale_workers":sum(aware(w.last_heartbeat_at)<cutoff or w.status=="OFFLINE" for w in workers),"oldest_job_at":oldest,"oldest_job_age_seconds":oldest_age,"instances":[{"worker_id":w.worker_id,"status":"OFFLINE" if aware(w.last_heartbeat_at)<cutoff else w.status,"current_job_id":w.current_job_id,"last_heartbeat_at":w.last_heartbeat_at,"version":w.version,"last_completed_job_id":w.last_completed_job_id,"recent_failure":w.recent_failure} for w in workers]},"imports":{"total":db.scalar(select(func.count()).select_from(ImportJob)) or 0,"active":queued+running,"failed":db.scalar(select(func.count()).select_from(ImportJob).where(ImportJob.status=="FAILED")) or 0,"last_success":{"id":last_success.id,"completed_at":last_success.completed_at} if last_success else None,"last_failure":{"id":last_failure.id,"completed_at":last_failure.completed_at} if last_failure else None}}
 
 @app.get("/api/v1/admin/system/export")
-def export_system(_:User=Depends(require_admin),db:Session=Depends(db_session)):
+def export_system(_:User=Depends(require_platform_admin),db:Session=Depends(db_session)):
     return Response(json.dumps(system_data(db),default=str),media_type="application/json",headers={"Content-Disposition":"attachment; filename=tokenscope-diagnostics.json"})
 
 # The production image copies Vite's output here. This catch-all is deliberately
