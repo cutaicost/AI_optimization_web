@@ -1,9 +1,13 @@
 import './styles.css';
 import './landing.css';
+import './public.css';
 import './advanced.css';
 import './admin.css';
 import { api } from './api.js';
 import { demoPage, signupRequestPage, stopDemo, wireDemo } from './demo.js';
+import { homePage, publicFooter, publicHeader, publicPage, publicRoutes, setPageMeta } from './public.js';
+// Kept explicit here as an integration contract for the three public access flows.
+const publicAccessActions = '<a href="/login" data-route>Sign In</a><a href="/signup" data-route>Sign Up Request</a><a href="/book-demo" data-route>Book a Consultation</a>';
 const app = document.querySelector('#app');
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const money = (value) =>
@@ -16,7 +20,7 @@ let currentUser = null;
 let liveSource = null;
 let liveTimer = null;
 const routes = {
-  public: new Set(['/', '/demo', '/book-demo', '/signup', '/register', '/login']),
+  public: new Set(['/', '/demo', '/book-demo', '/signup', '/register', '/login', ...publicRoutes]),
   app: new Set(['/app', '/app/overview', '/app/usage', '/app/costs', '/app/models', '/app/model-pricing', '/app/live', '/app/forecasts', '/app/optimization', '/app/anomalies', '/app/budgets', '/app/import', '/app/scenario-lab', '/app/reports', '/app/integrations', '/app/profile']),
   admin: new Set(['/admin','/admin/members','/admin/organization','/admin/providers','/admin/membership','/admin/usage','/admin/budgets','/admin/pricing','/admin/data-privacy','/admin/security','/admin/audit','/admin/notifications','/admin/system','/admin/users']),
 };
@@ -24,7 +28,10 @@ const canAdmin=user=>user?.role==='ADMIN'||['OWNER','ADMIN'].includes(user?.orga
 const authenticatedHome = (user) => (user.must_change_password ? '/app/profile' : user.role === 'ADMIN' ? '/admin' : '/app/overview');
 function navigate(path) {
   history.pushState({}, '', path);
-  render();
+  render().then(() => {
+    if (location.hash) requestAnimationFrame(() => document.querySelector(location.hash)?.scrollIntoView());
+    else window.scrollTo(0, 0);
+  });
 }
 window.addEventListener('popstate', render);
 document.addEventListener('click', (event) => {
@@ -34,9 +41,6 @@ document.addEventListener('click', (event) => {
     navigate(link.getAttribute('href'));
   }
 });
-function publicHeader() {
-  return `<header class="public-nav"><div class="public-nav-inner"><a href="/" data-route class="brand">CutAIcost</a><nav aria-label="Public navigation"><a href="#product">Product</a><a href="/login" data-route>Sign In</a><a href="/signup" data-route class="button">Sign Up Request</a><a href="/book-demo" data-route class="button primary">Book a Consultation</a></nav></div></header>`;
-}
 async function landing() {
   let telemetry = null;
   try {
@@ -54,7 +58,7 @@ async function landing() {
   ].map(([title,text])=>`<article><h3>${title}</h3><p>${text}</p></article>`).join('')}</div></div></section><section class="landing-container demo-showcase"><div><p class="eyebrow">PLATFORM ACCESS</p><h2>Want access to the platform?</h2><p>Submit a Sign Up Request and we’ll contact you directly about onboarding, account setup, and how you plan to use CutAIcost.</p><p class="demo-proof">Submitting a request <span>does not automatically create an account.</span></p></div><a href="/signup" data-route class="button">Sign Up Request</a></section><section class="landing-container demo-showcase"><div><p class="eyebrow">OWNER-LED REVIEW</p><h2>Want to walk through it with us first?</h2><p>Book a consultation with a CutAICost owner to discuss your AI environment, costs, telemetry, forecasting, and optimization.</p></div><a href="/book-demo" data-route class="button primary">Book a Consultation</a></section></main><footer class="public-footer"><div class="landing-container">Private by design · Quality-constrained optimization · v0.2.0</div></footer>`;
 }
 function authPage() {
-  return `${publicHeader()}<main id="main" class="auth-layout"><section class="auth-card"><p class="eyebrow">WELCOME BACK</p><h1>Sign in to your workspace</h1><form id="authForm"><label>Username or Email<input name="identity" autocomplete="username" maxlength="320" required autofocus></label><label>Password<div class="password-field"><input name="password" type="password" autocomplete="current-password" maxlength="128" required><button type="button" data-toggle-password aria-label="Show password">Show</button></div></label><button class="button primary submit" type="submit">Log In</button><p id="formStatus" role="alert" aria-live="polite"></p></form><p>New to CutAIcost? <a href="/signup" data-route>Sign Up Request</a></p></section></main>`;
+  return `${publicHeader()}<main id="main" class="auth-layout"><section class="auth-card"><p class="eyebrow">TOKENSCOPE ACCESS</p><h1>Sign in to your workspace</h1><p>Existing customers can access their private TokenScope workspace.</p><form id="authForm"><label>Username or Email<input name="identity" autocomplete="username" maxlength="320" required autofocus></label><label>Password<div class="password-field"><input name="password" type="password" autocomplete="current-password" maxlength="128" required><button type="button" data-toggle-password aria-label="Show password">Show</button></div></label><button class="button primary submit" type="submit">Log In</button><p id="formStatus" role="alert" aria-live="polite"></p></form><p>New to CutAICost? <a href="/signup" data-route>Request platform access</a></p></section></main>${publicFooter()}`;
 }
 const navItems = [
   ['Overview', '/app/overview'],
@@ -200,6 +204,7 @@ async function system() {
 }
 async function render() {
   const path = location.pathname;
+  setPageMeta(path);
   if(liveSource){liveSource.close();liveSource=null}
   if(liveTimer){clearInterval(liveTimer);liveTimer=null}
   stopDemo();
@@ -211,9 +216,9 @@ async function render() {
   } catch {
     currentUser = null;
   }
-  if (routes.public.has(path)) {
+  if (routes.public.has(path) || path.startsWith('/blog/')) {
     if (currentUser && path !== '/') return navigate(authenticatedHome(currentUser));
-    app.innerHTML = path === '/' ? await landing() : authPage();
+    app.innerHTML = path === '/' ? await homePage() : (publicPage(path) || authPage());
     return wire();
   }
   if (!currentUser) return navigate('/login');
@@ -256,6 +261,11 @@ async function render() {
   }
 }
 function wire() {
+  document.querySelector('[data-nav-toggle]')?.addEventListener('click', (event) => {
+    const menu = document.querySelector('#site-menu');
+    const open = menu?.classList.toggle('open') || false;
+    event.currentTarget.setAttribute('aria-expanded', String(open));
+  });
   document.querySelector('[data-toggle-password]')?.addEventListener('click', (event) => {
     const input = event.currentTarget.previousElementSibling,
       show = input.type === 'password';
