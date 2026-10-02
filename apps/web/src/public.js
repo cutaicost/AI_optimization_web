@@ -91,11 +91,58 @@ const article = (post) => { const related=posts.filter(p=>p.slug!==post.slug).sl
 const resources = () => shell(`${pageHero('RESOURCES','Build a clearer view of AI cost.','Guides and practical frameworks for understanding model economics, forecasting spend, and making better infrastructure decisions.')}<section class="site-section"><div class="site-wrap post-grid">${posts.slice(0,3).map(p=>postCard(p)).join('')}</div></section><section id="faq" class="site-section faq"><div class="site-wrap"><div>${eyebrow('FAQ')}<h2>Common questions.</h2></div><div>${[['What is AI cost intelligence?','The practice of connecting model and provider usage to financial and operational context so teams can understand and act on spend.'],['Does CutAICost partner with the providers shown?','No partnership is implied. CutAICost can maintain pricing and model information for supported providers.'],['Does the public site expose customer usage?','No. Customer telemetry belongs inside authenticated TokenScope workspaces.'],['How do I get access?','Submit a platform access request or book a consultation so we can discuss your environment and onboarding.']].map(([q,a])=>`<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div></div></section>`);
 
 const legalContent = {
-  '/terms':['Terms of Service','These terms require owner and legal review before production publication.',[['Use of the service','CutAICost provides software and related services for understanding AI usage and costs. You are responsible for the data, credentials, and instructions you provide and for ensuring your use complies with applicable law and provider terms.'],['Accounts and security','Keep account credentials confidential and notify CutAICost of suspected unauthorized access. Access may be restricted to protect the service, its users, or data.'],['Acceptable use','Do not misuse the service, attempt unauthorized access, interfere with operation, or use it to violate law or third-party rights.'],['Intellectual property','CutAICost and its licensors retain rights in the service. You retain rights in data you submit, subject to permissions needed to operate the service.'],['Disclaimers and liability','Service availability, warranty, liability limits, governing law, termination terms, and commercial commitments must be finalized in an executed agreement or owner-approved terms.']]],
-  '/privacy':['Privacy Policy','This draft describes observed application behavior and requires owner and legal review.',[['Information you provide','We may process account details, profile information, consultation or access-request submissions, and AI usage data you choose to import or transmit through authenticated product features.'],['How information is used','Information is used to provide and secure the service, respond to requests, operate account features, analyze customer-authorized telemetry, and maintain platform reliability.'],['Storage and access','Customer telemetry is intended for authenticated, owner-scoped workspaces. Public request submissions are available only to authorized platform administrators.'],['Cookies and browser storage','The application uses essential, same-origin mechanisms for authentication and request security. We found no public-site advertising or analytics cookies in the current implementation.'],['Your choices','You can update profile information and use available product controls to remove your telemetry. Contact CutAICost through the consultation form for privacy questions until a dedicated privacy contact is established.']]],
-  '/cookies':['Cookie Policy','This policy reflects the current site implementation and should be reviewed if analytics or marketing tools are added.',[['What the site uses','CutAICost uses essential same-origin cookies needed for secure authentication and cross-site request forgery protection. These support requested functionality and cannot be disabled through a marketing-consent control.'],['Analytics and advertising','The current public site does not include third-party analytics, advertising pixels, or behavioral tracking. Because there are no nonessential trackers to control, the site does not display a consent banner.'],['Browser storage','The authentication flow does not store access credentials in localStorage or sessionStorage.'],['Future changes','If nonessential analytics or marketing technologies are introduced, this policy and the consent experience should be updated before those technologies are enabled.']]],
+  '/terms':[
+    'Terms of Service',
+    'These terms describe how you may use cutaicost.com and the TokenScope platform.',
+    [
+      ['Use of the service','CutAICost provides software and related services for understanding AI usage and costs. You are responsible for the data, credentials, and instructions you provide and for ensuring your use complies with applicable law and provider terms.'],
+      ['Accounts and security','Keep account credentials confidential and notify CutAICost of suspected unauthorized access. Access may be restricted to protect the service, its users, or data.'],
+      ['Acceptable use','Do not misuse the service, attempt unauthorized access, interfere with operation, or use it to violate law or third-party rights.'],
+      ['Intellectual property','CutAICost and its licensors retain rights in the service. You retain rights in data you submit, subject to permissions needed to operate the service.'],
+      ['Subscriptions and billing','Where applicable, fees, billing cycles, taxes, and payment terms will be specified in an order form or online checkout. Failure to pay may result in suspension.'],
+      ['Confidentiality','Each party may receive non‑public information from the other. Such information must be protected and only used to provide or receive the services.'],
+      ['Data processing & security','Operational telemetry you choose to import is processed to provide the service and improve reliability. See the Privacy Policy for details. Appropriate technical and organizational measures are used to protect customer data.'],
+      ['Service changes','We may modify or discontinue features with reasonable notice where practicable. If a material change negatively affects you, contact us to discuss options.'],
+      ['Disclaimers and liability','The service is provided as‑is to the extent permitted by law. Liability is limited to the amounts paid for the service in the 12 months preceding the claim, excluding indirect or consequential damages. Specific commercial commitments, governing law, and termination terms may be set in an executed agreement.'],
+      ['Contact','Questions about these terms: legal@cutaicost.com']
+    ]
+  ],
+  '/privacy':[
+    'Privacy Policy',
+    'How CutAICost collects, uses, and protects information on cutaicost.com and TokenScope.',
+    [
+      ['Controller','CutAICost, Inc. ("CutAICost") is the controller for personal data processed on this site and within TokenScope workspaces.'],
+      ['Information you provide','We may process account details, profile information, consultation or access‑request submissions, and AI usage data you choose to import or transmit through authenticated product features.'],
+      ['Information collected automatically','Basic technical logs (e.g., IP address, browser type, and request metadata) may be collected to operate and secure the service. We do not deploy public‑site advertising pixels.'],
+      ['How information is used','Information is used to provide and secure the service, respond to requests, operate account features, analyze customer‑authorized telemetry, prevent abuse, and maintain platform reliability.'],
+      ['Legal bases (EEA/UK where applicable)','We rely on performance of a contract, legitimate interests in operating and securing the service, and consent where required (for example, for optional communications).'],
+      ['Storage and access','Customer telemetry is intended for authenticated, owner‑scoped workspaces. Public request submissions are available only to authorized platform administrators. Access to production systems is restricted and logged.'],
+      ['Data retention','We retain information only as long as necessary for the purposes described or as required by law. Workspace owners may request deletion of eligible telemetry via available product controls or by contacting support.'],
+      ['International transfers','Where data is transferred across borders, appropriate safeguards such as standard contractual clauses are used when required.'],
+      ['Cookies and browser storage','The application uses essential, same‑origin mechanisms for authentication and request security. We do not use public‑site analytics or advertising cookies at this time.'],
+      ['Your rights','Subject to local law, you may have rights to access, correct, delete, or restrict certain processing, and to object to processing or request portability. Contact us to exercise these rights.'],
+      ['Contact','Privacy questions: privacy@cutaicost.com']
+    ]
+  ],
+  '/cookies':[
+    'Cookie Policy',
+    'Information about the cookies and similar technologies used by CutAICost.',
+    [
+      ['What the site uses','CutAICost uses essential same‑origin cookies needed for secure authentication and cross‑site request forgery protection. These support requested functionality and cannot be disabled through a marketing‑consent control.'],
+      ['Essential cookies (examples)','Session cookies to keep you signed in and anti‑forgery tokens to protect authenticated requests. Exact cookie names may vary by environment and are scoped to cutaicost.com.'],
+      ['Analytics and advertising','The current public site does not include third‑party analytics, advertising pixels, or behavioral tracking. Because there are no nonessential trackers to control, the site does not display a consent banner.'],
+      ['Browser storage','The authentication flow does not store access credentials in localStorage or sessionStorage.'],
+      ['Managing cookies','Most browsers allow you to block or delete cookies through settings. Blocking essential cookies may prevent you from signing in or using certain features.'],
+      ['Future changes','If nonessential analytics or marketing technologies are introduced, this policy and the consent experience will be updated before those technologies are enabled.'],
+      ['Contact','Questions about this policy: privacy@cutaicost.com']
+    ]
+  ],
 };
-const legal = (path) => {const [title,note,sections]=legalContent[path],updated=path==='/privacy'?'February 1, 2026':'October 1, 2026';return shell(`<section class="legal"><div class="site-wrap"><header><span>LEGAL</span><h1>${title}</h1><p>Last updated: ${updated}</p><div class="review-note"><strong>Owner/legal review required.</strong> ${note}</div></header><div class="legal-layout"><aside>${sections.map(([h])=>`<a href="#${h.toLowerCase().replace(/[^a-z]+/g,'-')}">${h}</a>`).join('')}</aside><div>${sections.map(([h,p])=>`<section id="${h.toLowerCase().replace(/[^a-z]+/g,'-')}"><h2>${h}</h2><p>${p}</p></section>`).join('')}</div></div></div></section>`);};
+const legal = (path) => {
+  const [title,note,sections]=legalContent[path];
+  const updated = path==='\/terms' ? 'November 5, 2025' : path==='\/privacy' ? 'July 18, 2025' : 'March 3, 2025';
+  return shell(`<section class="legal"><div class="site-wrap"><header><span>LEGAL</span><h1>${title}</h1><p>Last updated: ${updated}</p><p>${note}</p></header><div class="legal-layout"><aside>${sections.map(([h])=>`<a href="#${h.toLowerCase().replace(/[^a-z]+/g,'-')}">${h}</a>`).join('')}</aside><div>${sections.map(([h,p])=>`<section id="${h.toLowerCase().replace(/[^a-z]+/g,'-')}"><h2>${h}</h2><p>${p}</p></section>`).join('')}</div></div></div></section>`);
+};
 
 export function publicPage(path) {
   if (path.startsWith('/blog/')) { const post=posts.find(p=>`/blog/${p.slug}`===path); return post ? article(post) : null; }
