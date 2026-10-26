@@ -60,36 +60,34 @@ const platform = () => shell(`${pageHero('TOKENSCOPE PLATFORM','Clarity for ever
 const solutions = () => shell(`${pageHero('SOLUTIONS','AI cost intelligence for every decision-maker.','Give engineering, finance, and AI platform teams a shared, evidence-aware view of usage and spend.')}<section class="site-section"><div class="site-wrap solution-list"><article><span>01 / ENGINEERING</span><h2>Build with cost context.</h2><p>See how applications, models, tokens, and latency contribute to spend—without reducing technical decisions to price alone.</p></article><article><span>02 / FINOPS</span><h2>Bring AI into financial operations.</h2><p>Centralize attribution, budget monitoring, reporting, and forecasts for a category that changes quickly.</p></article><article><span>03 / AI LEADERSHIP</span><h2>Make model strategy measurable.</h2><p>Compare providers and models, evaluate tradeoffs, and plan infrastructure with clearer evidence.</p></article></div></section>${finalCta()}`);
 const pricing = () => shell(`${pageHero('PRICING','Pricing built around your AI operations.','CutAICost is currently onboarding organizations through a consultation-led process. We will scope access around your data, providers, and operating needs.')}<section class="site-section"><div class="site-wrap pricing-panel"><div><span>CONSULTATION-LED ACCESS</span><h2>Let’s understand your environment first.</h2><p>Tell us about your providers, workloads, and cost-management goals. We’ll discuss platform fit, onboarding, and pricing directly—without inventing a plan that may not match your needs.</p></div><a href="/book-demo" data-route class="button primary">Discuss Pricing ↗</a></div></section>${finalCta()}`);
 const about = () => {
+  // Leadership-only view with gender icons; Joseph promoted to VP of Engineering
   const team = [
-    // Leadership
-    { name: 'Lauren McAllister', title: 'Chief Executive Officer' },
-    { name: 'Marcus Bell', title: 'Chief Operating Officer' },
-    { name: 'Aisha Patel', title: 'Chief Technology Officer' },
-    { name: 'Daniel Romero', title: 'Head of Finance' },
-    // Engineering
-    { name: 'Joseph Lekowski', title: 'Director of Engineering' },
-    { name: 'Emily Carter', title: 'Senior Software Engineer' },
-    { name: 'Brian Whitaker', title: 'Platform Engineer' },
-    { name: 'Hannah Brooks', title: 'Data Engineer' },
-    // Product & Design
-    { name: 'Megan Walsh', title: 'Director of Product' },
-    { name: 'Jason Kim', title: 'Product Manager' },
-    { name: 'Olivia Reed', title: 'Head of Design' },
-    // Go-to-market & Success
-    { name: 'Chris Donovan', title: 'Head of Sales' },
-    { name: 'Nicole Hernandez', title: 'Customer Success Lead' },
-    // Operations & Compliance
-    { name: 'Patrick O\'Connell', title: 'Security & Compliance Lead' },
+    // C-level
+    { name: 'Lauren McAllister', title: 'Chief Executive Officer', gender: 'female' },
+    { name: 'Marcus Bell', title: 'Chief Operating Officer', gender: 'male' },
+    { name: 'Aisha Patel', title: 'Chief Technology Officer', gender: 'female' },
+    // VPs (3 departments)
+    { name: 'Joseph Lekowski', title: 'VP of Engineering', gender: 'male' },
+    { name: 'Megan Walsh', title: 'VP of Product', gender: 'female' },
+    { name: 'Daniel Romero', title: 'VP of Finance', gender: 'male' },
   ];
+
+  const maleIcon = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c0-3.31 3.13-6 7-6s7 2.69 7 6v1H5v-1z"/></svg>';
+  const femaleIcon = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="7.5" r="3.5"/><path d="M12 12a6 6 0 1 0 0 12v-3h-2v-2h2v-2h2v2h2v2h-2v3a6 6 0 0 0-2-12z"/></svg>';
 
   const teamGrid = `<section id="team" class="site-section" aria-labelledby="team-title">
     <div class="site-wrap">
       <div class="split-heading">
-        <div class="site-eyebrow"><span></span>OUR TEAM</div>
-        <h2 id="team-title">People building TokenScope</h2>
+        <div class="site-eyebrow"><span></span>LEADERSHIP</div>
+        <h2 id="team-title">Executive team</h2>
       </div>
-      <div class="cap-grid" role="list">
-        ${team.map(m => `<article role="listitem"><h3>${m.name}</h3><p>${m.title}</p></article>`).join('')}
+      <div class="cap-grid team-grid" role="list">
+        ${team.map(m => `
+          <article role="listitem" class="team-card" aria-label="${e(m.name)}, ${e(m.title)}">
+            <div class="avatar ${m.gender}" aria-hidden="true">${m.gender==='female'?femaleIcon:maleIcon}</div>
+            <div class="meta"><h3>${m.name}</h3><p>${m.title}</p></div>
+          </article>
+        `).join('')}
       </div>
     </div>
   </section>`;
