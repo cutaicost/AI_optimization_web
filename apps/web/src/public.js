@@ -91,7 +91,7 @@ const about = () => {
     <div class="site-wrap">
       <div class="split-heading">
         <div class="site-eyebrow"><span></span>LEADERSHIP</div>
-        <h2 id="team-title">Executive team</h2>
+        <h2 id="team-title">Leadership team</h2>
       </div>
       <div class="cap-grid team-grid" role="list">
         ${team.map(m => `
