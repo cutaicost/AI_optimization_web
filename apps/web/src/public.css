@@ -17,8 +17,8 @@
 
 /* About: leadership team cards (names looked cramped; improve hierarchy and alignment) */
 .team-grid{gap:20px;display:grid;grid-template-columns:repeat(3,1fr)}
-.team-grid{justify-items:center}
-.team-card{display:flex;align-items:center;gap:16px;padding:16px 18px;border:1px solid #3a3242;background:linear-gradient(180deg,#1a1326,#100b18);border-radius:14px}
+.team-grid{justify-items:stretch;align-items:stretch}
+.team-card{display:flex;align-items:center;gap:16px;padding:16px 18px;border:1px solid #3a3242;background:linear-gradient(180deg,#1a1326,#100b18);border-radius:14px;width:100%;height:100%;min-height:96px}
 .team-card .meta{text-align:center}
 .team-card:hover,.team-card:focus-within{border-color:#9d70f5;background:linear-gradient(180deg,#221831,#140f1f)}
 .team-card .avatar{width:56px;height:56px;border-radius:999px;display:grid;place-items:center;color:#ded8e5;background:linear-gradient(180deg,#2b2533,#1b1720);border:1px solid #3a3242}
@@ -27,8 +27,12 @@
 .team-card .avatar.male{background:linear-gradient(180deg,#2d3f6f,#20273d)}
 .team-card .meta h3{margin:0;font-size:18px;line-height:1.25}
 .team-card .meta p{margin:4px 0 0;color:#827b88;font-size:13px}
-@media(max-width:900px){.team-grid{gap:18px;grid-template-columns:repeat(2,1fr)}.team-card{padding:14px 16px;gap:14px}.team-card .avatar{width:48px;height:48px}.team-card .avatar svg{width:24px;height:24px}.team-card .meta h3{font-size:17px}}
-@media(max-width:700px){.team-grid{gap:14px;grid-template-columns:1fr}.team-card{padding:12px 13px;gap:12px}.team-card .avatar{width:42px;height:42px}.team-card .avatar svg{width:22px;height:22px}.team-card .meta p{font-size:12px}}
+@media(max-width:900px){.team-grid{gap:18px;grid-template-columns:repeat(2,1fr)}.team-card{padding:14px 16px;gap:14px;min-height:88px}.team-card .avatar{width:48px;height:48px}.team-card .avatar svg{width:24px;height:24px}.team-card .meta h3{font-size:17px}}
+@media(max-width:700px){.team-grid{gap:14px;grid-template-columns:1fr}.team-card{padding:12px 13px;gap:12px;min-height:80px}.team-card .avatar{width:42px;height:42px}.team-card .avatar svg{width:22px;height:22px}.team-card .meta p{font-size:12px}}
+
+/* Remove gray background from the entire Team section area */
+#team{background:none!important;border-top-color:transparent;border-bottom-color:transparent}
+#team .site-wrap{background:transparent}
 
 /* Center the leadership section heading within the Team section only */
 #team .split-heading{justify-items:center;text-align:center}
