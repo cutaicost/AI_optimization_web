@@ -59,7 +59,43 @@ const pageHero = (label, title, text) => `<section class="page-hero"><div class=
 const platform = () => shell(`${pageHero('TOKENSCOPE PLATFORM','Clarity for every AI infrastructure decision.','Monitor, understand, forecast, and optimize model costs across your AI stack from one operating view.')}<section class="site-section"><div class="site-wrap product-split"><div><h2>Cost intelligence with operational context.</h2><p>TokenScope connects provider and model economics to the workloads that create them. Move from totals to the applications, models, and usage patterns behind your spend.</p><ul class="check-list"><li>AI cost and token monitoring</li><li>Model and provider visibility</li><li>Budgets and anomaly detection</li><li>Forecasts and scenario simulations</li><li>Quality-aware recommendations</li><li>Reports and integrations</li></ul></div>${productVisual()}</div></section><section id="forecasting" class="site-section feature-detail"><div class="site-wrap cap-grid"><article><h3>Monitor</h3><p>Track requests, tokens, attributed spend, latency, and model activity.</p></article><article><h3>Forecast</h3><p>Translate observed trends into forward-looking cost expectations.</p></article><article id="optimization"><h3>Optimize</h3><p>Find alternatives while keeping workload and quality needs visible.</p></article><article id="integrations"><h3>Integrate</h3><p>Import telemetry and connect supported provider workflows securely.</p></article></div></section>${finalCta()}`);
 const solutions = () => shell(`${pageHero('SOLUTIONS','AI cost intelligence for every decision-maker.','Give engineering, finance, and AI platform teams a shared, evidence-aware view of usage and spend.')}<section class="site-section"><div class="site-wrap solution-list"><article><span>01 / ENGINEERING</span><h2>Build with cost context.</h2><p>See how applications, models, tokens, and latency contribute to spend—without reducing technical decisions to price alone.</p></article><article><span>02 / FINOPS</span><h2>Bring AI into financial operations.</h2><p>Centralize attribution, budget monitoring, reporting, and forecasts for a category that changes quickly.</p></article><article><span>03 / AI LEADERSHIP</span><h2>Make model strategy measurable.</h2><p>Compare providers and models, evaluate tradeoffs, and plan infrastructure with clearer evidence.</p></article></div></section>${finalCta()}`);
 const pricing = () => shell(`${pageHero('PRICING','Pricing built around your AI operations.','CutAICost is currently onboarding organizations through a consultation-led process. We will scope access around your data, providers, and operating needs.')}<section class="site-section"><div class="site-wrap pricing-panel"><div><span>CONSULTATION-LED ACCESS</span><h2>Let’s understand your environment first.</h2><p>Tell us about your providers, workloads, and cost-management goals. We’ll discuss platform fit, onboarding, and pricing directly—without inventing a plan that may not match your needs.</p></div><a href="/book-demo" data-route class="button primary">Discuss Pricing ↗</a></div></section>${finalCta()}`);
-const about = () => shell(`${pageHero('ABOUT CUTAICOST','AI should be powerful—not financially opaque.','CutAICost exists to help organizations understand and improve the economics of the AI systems they build and operate.')}<section class="site-section"><div class="site-wrap editorial-grid"><div><h2>Why we’re building CutAICost.</h2></div><div><p>AI infrastructure introduces a new kind of operational complexity: usage-based pricing, fast-moving model catalogs, multiple providers, and costs that can be difficult to connect back to business activity.</p><p>We built TokenScope to bring those signals into one place. Our focus is straightforward: help teams see what they spend, understand why, plan what comes next, and find responsible opportunities to optimize.</p><p>We believe cost decisions should preserve the context that matters—quality, reliability, workload needs, and organizational priorities.</p></div></div></section>${finalCta()}`);
+const about = () => {
+  const team = [
+    // Leadership
+    { name: 'Lauren McAllister', title: 'Chief Executive Officer' },
+    { name: 'Marcus Bell', title: 'Chief Operating Officer' },
+    { name: 'Aisha Patel', title: 'Chief Technology Officer' },
+    { name: 'Daniel Romero', title: 'Head of Finance' },
+    // Engineering
+    { name: 'Joseph Lekowski', title: 'Director of Engineering' },
+    { name: 'Emily Carter', title: 'Senior Software Engineer' },
+    { name: 'Brian Whitaker', title: 'Platform Engineer' },
+    { name: 'Hannah Brooks', title: 'Data Engineer' },
+    // Product & Design
+    { name: 'Megan Walsh', title: 'Director of Product' },
+    { name: 'Jason Kim', title: 'Product Manager' },
+    { name: 'Olivia Reed', title: 'Head of Design' },
+    // Go-to-market & Success
+    { name: 'Chris Donovan', title: 'Head of Sales' },
+    { name: 'Nicole Hernandez', title: 'Customer Success Lead' },
+    // Operations & Compliance
+    { name: 'Patrick O\'Connell', title: 'Security & Compliance Lead' },
+  ];
+
+  const teamGrid = `<section id="team" class="site-section" aria-labelledby="team-title">
+    <div class="site-wrap">
+      <div class="split-heading">
+        <div class="site-eyebrow"><span></span>OUR TEAM</div>
+        <h2 id="team-title">People building TokenScope</h2>
+      </div>
+      <div class="cap-grid" role="list">
+        ${team.map(m => `<article role="listitem"><h3>${m.name}</h3><p>${m.title}</p></article>`).join('')}
+      </div>
+    </div>
+  </section>`;
+
+  return shell(`${pageHero('ABOUT CUTAICOST','AI should be powerful—not financially opaque.','CutAICost exists to help organizations understand and improve the economics of the AI systems they build and operate.')}<section class="site-section"><div class="site-wrap editorial-grid"><div><h2>Why we’re building CutAICost.</h2></div><div><p>AI infrastructure introduces a new kind of operational complexity: usage-based pricing, fast-moving model catalogs, multiple providers, and costs that can be difficult to connect back to business activity.</p><p>We built TokenScope to bring those signals into one place. Our focus is straightforward: help teams see what they spend, understand why, plan what comes next, and find responsible opportunities to optimize.</p><p>We believe cost decisions should preserve the context that matters—quality, reliability, workload needs, and organizational priorities.</p></div></div></section>${teamGrid}${finalCta()}`);
+}
 const contact = () => shell(`${pageHero('CONTACT','Start a conversation.','Whether you are exploring AI FinOps or already managing production model spend, we would like to understand what you are working on.')}<section class="site-section"><div class="site-wrap contact-grid"><a href="/book-demo" data-route><span>01</span><h2>Book a consultation</h2><p>Talk through your AI environment and cost-management goals.</p><b>Get started →</b></a><a href="/signup" data-route><span>02</span><h2>Request platform access</h2><p>Tell us about your organization and TokenScope use case.</p><b>Request access →</b></a><a href="/login" data-route><span>03</span><h2>Existing customer?</h2><p>Sign in to your private TokenScope workspace.</p><b>Sign in →</b></a></div></section>`);
 
 export const posts = [
