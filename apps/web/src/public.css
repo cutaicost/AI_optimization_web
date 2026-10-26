@@ -17,7 +17,9 @@
 
 /* About: leadership team cards (names looked cramped; improve hierarchy and alignment) */
 .team-grid{gap:20px;display:grid;grid-template-columns:repeat(3,1fr)}
+.team-grid{justify-items:center}
 .team-card{display:flex;align-items:center;gap:16px;padding:16px 18px;border:1px solid #332b3b;background:linear-gradient(180deg,#15121a,#0f0c14);border-radius:14px}
+.team-card .meta{text-align:center}
 .team-card:hover,.team-card:focus-within{border-color:#3f3650;background:linear-gradient(180deg,#17131d,#110d16)}
 .team-card .avatar{width:56px;height:56px;border-radius:999px;display:grid;place-items:center;color:#ded8e5;background:linear-gradient(180deg,#2b2533,#1b1720);border:1px solid #3a3242}
 .team-card .avatar svg{width:28px;height:28px;fill:#ded8e5;opacity:.96}
@@ -27,3 +29,8 @@
 .team-card .meta p{margin:4px 0 0;color:#827b88;font-size:13px}
 @media(max-width:900px){.team-grid{gap:18px;grid-template-columns:repeat(2,1fr)}.team-card{padding:14px 16px;gap:14px}.team-card .avatar{width:48px;height:48px}.team-card .avatar svg{width:24px;height:24px}.team-card .meta h3{font-size:17px}}
 @media(max-width:700px){.team-grid{gap:14px;grid-template-columns:1fr}.team-card{padding:12px 13px;gap:12px}.team-card .avatar{width:42px;height:42px}.team-card .avatar svg{width:22px;height:22px}.team-card .meta p{font-size:12px}}
+
+/* Center the leadership section heading within the Team section only */
+#team .split-heading{justify-items:center;text-align:center}
+#team .split-heading h2{margin-left:auto;margin-right:auto}
+#team .split-heading .site-eyebrow{justify-self:center}
