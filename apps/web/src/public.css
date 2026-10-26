@@ -17,7 +17,7 @@
 
 /* About: leadership team cards (names looked cramped; improve hierarchy and alignment) */
 .team-grid{gap:20px;display:grid;grid-template-columns:repeat(3,1fr)}
-.team-grid{justify-items:stretch;align-items:stretch}
+.team-grid{justify-items:stretch;align-items:stretch;grid-auto-rows:1fr}
 .team-card{display:flex;align-items:center;gap:16px;padding:16px 18px;border:1px solid #3a3242;background:linear-gradient(180deg,#1a1326,#100b18);border-radius:14px;width:100%;height:100%;min-height:96px}
 .team-card .meta{text-align:center}
 .team-card:hover,.team-card:focus-within{border-color:#9d70f5;background:linear-gradient(180deg,#221831,#140f1f)}
@@ -31,8 +31,17 @@
 @media(max-width:700px){.team-grid{gap:14px;grid-template-columns:1fr}.team-card{padding:12px 13px;gap:12px;min-height:80px}.team-card .avatar{width:42px;height:42px}.team-card .avatar svg{width:22px;height:22px}.team-card .meta p{font-size:12px}}
 
 /* Remove gray background from the entire Team section area */
-#team{background:none!important;border-top-color:transparent;border-bottom-color:transparent}
-#team .site-wrap{background:transparent}
+.public-site #team,
+.public-site #team.site-section{background-color:#0b0910!important;background-image:none!important;border:0!important;box-shadow:none!important}
+.public-site #team::before,
+.public-site #team::after,
+.public-site #team.site-section::before,
+.public-site #team.site-section::after{content:none!important;display:none!important;background:transparent!important;border:0!important}
+.public-site #team .site-wrap{background:transparent!important;border:0!important;box-shadow:none!important}
+.public-site #team .site-wrap::before,
+.public-site #team .site-wrap::after{content:none!important;display:none!important;background:transparent!important;border:0!important}
+/* Ensure inner grid wrapper has no tint/border */
+#team .cap-grid{background:transparent!important;border:0!important;box-shadow:none!important}
 
 /* Center the leadership section heading within the Team section only */
 #team .split-heading{justify-items:center;text-align:center}
