@@ -268,7 +268,87 @@ const articleBodies = {
 };
 const article = (post) => { const related=posts.filter(p=>p.slug!==post.slug).slice(0,3); return shell(`<article class="article"><header class="article-head"><div class="site-wrap"><a href="/blog" data-route class="back-link">← Journal</a><div class="post-meta">${post.category} · ${post.minutes} MIN READ</div><h1>${post.title}</h1><p>${post.excerpt}</p><small>CutAICost Editorial · ${post.date}</small></div></header><div class="site-wrap article-layout"><aside><span>IN THIS ARTICLE</span>${articleBodies[post.slug].map(([h])=>`<a href="#${h.toLowerCase().replace(/[^a-z]+/g,'-')}">${h}</a>`).join('')}</aside><div class="article-body"><p class="article-lede">AI infrastructure costs are easiest to manage when the underlying mechanics are visible. The goal is not simply to spend less; it is to make intentional tradeoffs with evidence.</p>${articleBodies[post.slug].map(([h,paragraphs])=>`<section id="${h.toLowerCase().replace(/[^a-z]+/g,'-')}"><h2>${h}</h2>${paragraphs.map(p=>`<p>${p}</p>`).join('')}</section>`).join('')}<div class="article-cta"><h2>Bring your AI cost signals together.</h2><p>See how TokenScope helps teams understand usage, forecast spend, and find optimization opportunities.</p><a href="/book-demo" data-route class="button primary">Book a Consultation ↗</a></div></div></div><section class="related-posts site-wrap"><span>CONTINUE READING</span><h2>Related perspectives</h2><div>${related.map(p=>`<a href="/blog/${p.slug}" data-route><small>${p.category}</small><strong>${p.title}</strong><span>${p.minutes} min read →</span></a>`).join('')}</div></section></article>`); };
 
-const resources = () => shell(`${pageHero('RESOURCES','Build a clearer view of AI cost.','Guides and practical frameworks for understanding model economics, forecasting spend, and making better infrastructure decisions.')}<section class="site-section"><div class="site-wrap post-grid">${posts.slice(0,3).map(p=>postCard(p)).join('')}</div></section><section id="faq" class="site-section faq"><div class="site-wrap"><div>${eyebrow('FAQ')}<h2>Common questions.</h2></div><div>${[['What is AI cost intelligence?','The practice of connecting model and provider usage to financial and operational context so teams can understand and act on spend.'],['Does CutAICost partner with the providers shown?','No partnership is implied. CutAICost can maintain pricing and model information for supported providers.'],['Does the public site expose customer usage?','No. Customer telemetry belongs inside authenticated TokenScope workspaces.'],['How do I get access?','Submit a platform access request or book a consultation so we can discuss your environment and onboarding.']].map(([q,a])=>`<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div></div></section>`);
+const resources = () => shell(`${pageHero('RESOURCES','Guides, FAQs, and updates for AI cost ops.','A lightweight hub with evergreen guides, a practical FAQ, and recent updates — distinct from the blog’s editorial posts.')} 
+  <section class="site-section">
+    <div class="site-wrap cap-grid">
+      <article>
+        <div class="split-heading">
+          <div class="site-eyebrow"><span></span>GUIDES & HOW‑TOS</div>
+          <h2>Operate with clarity</h2>
+        </div>
+        <p>Short, evergreen explainers you can share with engineering, finance, and AI platform teams.</p>
+      </article>
+      <article id="calc-cost">
+        <h3>How TokenScope calculates cost</h3>
+        <p>Separate provider‑recorded amounts from calculated estimates. Attribute requests with stable dimensions (owner, app, model, provider, environment) and retain provenance on catalog pricing. This enables reconciliation and trustworthy rollups.</p>
+        <p><a href="/blog/how-ai-api-pricing-works" data-route>Read background →</a></p>
+      </article>
+      <article id="forecasting-assumptions">
+        <h3>Forecasting assumptions that matter</h3>
+        <p>Forecast the workload, not just invoices. Use clear drivers (requests, users, tokens/request, model mix), represent uncertainty with scenarios, and record why a forecast moved. Compare against budgets to act before invoices close.</p>
+        <p><a href="/blog/ai-cost-forecasting-explained" data-route>Deep dive →</a></p>
+      </article>
+      <article id="connect-provider">
+        <h3>Connecting a provider</h3>
+        <p>Decide which signals to import (requests, tokens, latency, cache hits, provider‑recorded cost). Keep secrets scoped, document access, and validate coverage with a small reconciliation report before wider rollout.</p>
+        <p><a href="/contact" data-route>Ask us about integrations →</a></p>
+      </article>
+    </div>
+  </section>
+
+  <section id="faq" class="site-section faq">
+    <div class="site-wrap">
+      <div>${eyebrow('FAQ')}<h2>Common questions</h2></div>
+      <div>
+        ${[
+          ['What is AI cost intelligence?','Connecting model/provider usage to financial and operational context so teams can understand and act on spend.'],
+          ['How do you verify savings for pricing?','We agree on a baseline, drivers, and measurement method up front. We then compare attributed spend for the same workloads after changes. See Pricing for details.'],
+          ['Does the public site expose customer usage?','No. Customer telemetry belongs inside authenticated TokenScope workspaces.'],
+          ['How do I get access?','Submit a platform access request or book a consultation so we can discuss your environment and onboarding.']
+        ].map(([q,a])=>`<details><summary>${q}</summary><p>${a}</p></details>`).join('')}
+      </div>
+    </div>
+  </section>
+
+  <section id="changelog" class="site-section">
+    <div class="site-wrap editorial-grid">
+      <div>
+        ${eyebrow('CHANGELOG')}
+        <h2>What’s new</h2>
+      </div>
+      <div>
+        <ul>
+          <li><strong>Careers page</strong> — Open roles and internship added with on‑site apply (October 2026).</li>
+          <li><strong>Pricing update</strong> — Success‑based model: 20% of verified annual savings (October 2026).</li>
+          <li><strong>About</strong> — Leadership section refined with clearer avatars and layout (October 2026).</li>
+          <li><strong>Journal</strong> — Expanded 2025 articles with deeper sections and examples.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="downloads" class="site-section">
+    <div class="site-wrap cap-grid">
+      <article>
+        <div class="split-heading">
+          <div class="site-eyebrow"><span></span>DOWNLOADS</div>
+          <h2>Checklists & one‑pagers</h2>
+        </div>
+        <p>Concise artifacts your team can use during planning and reviews.</p>
+      </article>
+      <article>
+        <h3>Model evaluation checklist (PDF)</h3>
+        <p>Compare models responsibly with quality, latency, reliability, and cost signals — plus common pitfalls to avoid.</p>
+        <p><a href="/contact" data-route class="button secondary">Request checklist</a></p>
+      </article>
+      <article>
+        <h3>TokenScope overview (1‑pager)</h3>
+        <p>A quick explanation of what TokenScope does, who it’s for, and how it fits into AI FinOps workflows.</p>
+        <p><a href="/contact" data-route class="button secondary">Request 1‑pager</a></p>
+      </article>
+    </div>
+  </section>
+`);
 
 const legalContent = {
   '/terms':[
