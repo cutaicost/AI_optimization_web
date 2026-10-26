@@ -18,9 +18,9 @@
 /* About: leadership team cards (names looked cramped; improve hierarchy and alignment) */
 .team-grid{gap:20px;display:grid;grid-template-columns:repeat(3,1fr)}
 .team-grid{justify-items:center}
-.team-card{display:flex;align-items:center;gap:16px;padding:16px 18px;border:1px solid #332b3b;background:linear-gradient(180deg,#15121a,#0f0c14);border-radius:14px}
+.team-card{display:flex;align-items:center;gap:16px;padding:16px 18px;border:1px solid #3a3242;background:linear-gradient(180deg,#1a1326,#100b18);border-radius:14px}
 .team-card .meta{text-align:center}
-.team-card:hover,.team-card:focus-within{border-color:#3f3650;background:linear-gradient(180deg,#17131d,#110d16)}
+.team-card:hover,.team-card:focus-within{border-color:#9d70f5;background:linear-gradient(180deg,#221831,#140f1f)}
 .team-card .avatar{width:56px;height:56px;border-radius:999px;display:grid;place-items:center;color:#ded8e5;background:linear-gradient(180deg,#2b2533,#1b1720);border:1px solid #3a3242}
 .team-card .avatar svg{width:28px;height:28px;fill:#ded8e5;opacity:.96}
 .team-card .avatar.female{background:linear-gradient(180deg,#5a2f86,#2a2140)}
