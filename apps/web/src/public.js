@@ -72,8 +72,20 @@ const about = () => {
     { name: 'Daniel Romero', title: 'VP of Finance', gender: 'male' },
   ];
 
-  const maleIcon = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c0-3.31 3.13-6 7-6s7 2.69 7 6v1H5v-1z"/></svg>';
-  const femaleIcon = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="7.5" r="3.5"/><path d="M12 12a6 6 0 1 0 0 12v-3h-2v-2h2v-2h2v2h2v2h-2v3a6 6 0 0 0-2-12z"/></svg>';
+  // Updated, more distinctive icons: larger silhouettes; female has a side ponytail for quick recognition
+  const maleIcon = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="7.75" r="3.75"/>
+      <path d="M4 20.5c0-3.8 3.58-6.5 8-6.5s8 2.7 8 6.5v1.5H4v-1.5z"/>
+    </svg>
+  `;
+  const femaleIcon = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="11.2" cy="7.6" r="3.6"/>
+      <path d="M17.9 7.4c.9.5 1.6 1.5 1.6 2.7 0 1.1-.6 2-1.4 2.5-.5.3-1.1.4-1.7.4-.7 0-1.4-.2-2-.6.2-.5.3-1 .3-1.6 0-1.9-1.1-3.6-2.7-4.4 1.7.1 3 .7 3.9 1.5.5.5.9 1 1 1.5l.1-.5c.1-.5.4-.9.9-1.1z"/>
+      <path d="M3.8 20.7c0-3.7 3.5-6.4 7.9-6.4s7.9 2.7 7.9 6.4v1.3H3.8v-1.3z"/>
+    </svg>
+  `;
 
   const teamGrid = `<section id="team" class="site-section" aria-labelledby="team-title">
     <div class="site-wrap">

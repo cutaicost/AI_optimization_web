@@ -16,13 +16,14 @@
  @media (max-width:700px){.trust-strip{padding:40px 0}.trust-badges{gap:8px}.trust-badges .badge{padding:8px 11px}.trust-badges .badge span{font-size:12px}.trust-badges .badge small{font-size:9px}}
 
 /* About: leadership team cards (names looked cramped; improve hierarchy and alignment) */
-.team-grid{gap:18px}
-.team-card{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid #2a2430;background:rgba(24,20,30,0.5);border-radius:12px}
-.team-card .avatar{width:44px;height:44px;border-radius:999px;display:grid;place-items:center;color:#ded8e5;background:linear-gradient(180deg,#2b2533,#1b1720);border:1px solid #3a3242}
-.team-card .avatar svg{width:22px;height:22px;fill:#ded8e5;opacity:.95}
-.team-card .avatar.female{background:linear-gradient(180deg,#4b2d6f,#2a2140)}
+.team-grid{gap:20px}
+.team-card{display:flex;align-items:center;gap:16px;padding:16px 18px;border:1px solid #332b3b;background:linear-gradient(180deg,#15121a,#0f0c14);border-radius:14px}
+.team-card:hover,.team-card:focus-within{border-color:#3f3650;background:linear-gradient(180deg,#17131d,#110d16)}
+.team-card .avatar{width:56px;height:56px;border-radius:999px;display:grid;place-items:center;color:#ded8e5;background:linear-gradient(180deg,#2b2533,#1b1720);border:1px solid #3a3242}
+.team-card .avatar svg{width:28px;height:28px;fill:#ded8e5;opacity:.96}
+.team-card .avatar.female{background:linear-gradient(180deg,#5a2f86,#2a2140)}
 .team-card .avatar.male{background:linear-gradient(180deg,#2d3f6f,#20273d)}
-.team-card .meta h3{margin:0;font-size:17px;line-height:1.25}
+.team-card .meta h3{margin:0;font-size:18px;line-height:1.25}
 .team-card .meta p{margin:4px 0 0;color:#827b88;font-size:13px}
-@media(max-width:900px){.team-card{padding:12px 14px}.team-card .avatar{width:40px;height:40px}.team-card .avatar svg{width:20px;height:20px}.team-card .meta h3{font-size:16px}}
-@media(max-width:700px){.team-grid{gap:14px}.team-card{padding:11px 12px}.team-card .avatar{width:36px;height:36px}.team-card .avatar svg{width:18px;height:18px}.team-card .meta p{font-size:12px}}
+@media(max-width:900px){.team-grid{gap:18px}.team-card{padding:14px 16px;gap:14px}.team-card .avatar{width:48px;height:48px}.team-card .avatar svg{width:24px;height:24px}.team-card .meta h3{font-size:17px}}
+@media(max-width:700px){.team-grid{gap:14px}.team-card{padding:12px 13px;gap:12px}.team-card .avatar{width:42px;height:42px}.team-card .avatar svg{width:22px;height:22px}.team-card .meta p{font-size:12px}}
