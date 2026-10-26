@@ -1,6 +1,6 @@
 const e = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-export const publicRoutes = new Set(['/', '/platform', '/solutions', '/pricing', '/resources', '/about', '/contact', '/blog', '/terms', '/privacy', '/cookies']);
+export const publicRoutes = new Set(['/', '/platform', '/solutions', '/pricing', '/resources', '/about', '/contact', '/blog', '/careers', '/terms', '/privacy', '/cookies']);
 
 const icon = (name) => ({
   visibility: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>',
@@ -15,7 +15,7 @@ export function publicHeader() {
 
 export function publicFooter() {
   const col = (title, links) => `<div><h3>${title}</h3>${links.map(([label, path]) => `<a href="${path}" data-route>${label}</a>`).join('')}</div>`;
-  return `<footer class="site-footer"><div class="site-wrap footer-top"><div class="footer-brand"><a href="/" data-route class="site-brand"><span class="brand-mark">C</span><span>Cut<span>AI</span>Cost</span></a><p>AI cost intelligence for teams building with models across providers.</p><a href="/book-demo" data-route class="footer-contact">Book a consultation →</a></div><div class="footer-links">${col('Platform', [['TokenScope','/platform'],['Optimization','/platform#optimization'],['Forecasting','/platform#forecasting'],['Integrations','/platform#integrations'],['Pricing','/pricing']])}${col('Company', [['About','/about'],['Blog','/blog'],['Contact','/contact'],['Sign In','/login']])}${col('Resources', [['Guides & articles','/resources'],['AI cost FAQ','/resources#faq']])}${col('Legal', [['Terms of Service','/terms'],['Privacy Policy','/privacy'],['Cookie Policy','/cookies']])}</div></div><div class="site-wrap footer-bottom"><span>© 2024-2026 CutAICost. All rights reserved.</span><span>Understand spend. Optimize decisions.</span></div></footer>`;
+  return `<footer class="site-footer"><div class="site-wrap footer-top"><div class="footer-brand"><a href="/" data-route class="site-brand"><span class="brand-mark">C</span><span>Cut<span>AI</span>Cost</span></a><p>AI cost intelligence for teams building with models across providers.</p><a href="/book-demo" data-route class="footer-contact">Book a consultation →</a></div><div class="footer-links">${col('Platform', [['TokenScope','/platform'],['Optimization','/platform#optimization'],['Forecasting','/platform#forecasting'],['Integrations','/platform#integrations'],['Pricing','/pricing']])}${col('Company', [['About','/about'],['Careers','/careers'],['Blog','/blog'],['Contact','/contact'],['Sign In','/login']])}${col('Resources', [['Guides & articles','/resources'],['AI cost FAQ','/resources#faq']])}${col('Legal', [['Terms of Service','/terms'],['Privacy Policy','/privacy'],['Cookie Policy','/cookies']])}</div></div><div class="site-wrap footer-bottom"><span>© 2024-2026 CutAICost. All rights reserved.</span><span>Understand spend. Optimize decisions.</span></div></footer>`;
 }
 
 const trustStrip = () => `
@@ -58,7 +58,7 @@ const pageHero = (label, title, text) => `<section class="page-hero"><div class=
 
 const platform = () => shell(`${pageHero('TOKENSCOPE PLATFORM','Clarity for every AI infrastructure decision.','Monitor, understand, forecast, and optimize model costs across your AI stack from one operating view.')}<section class="site-section"><div class="site-wrap product-split"><div><h2>Cost intelligence with operational context.</h2><p>TokenScope connects provider and model economics to the workloads that create them. Move from totals to the applications, models, and usage patterns behind your spend.</p><ul class="check-list"><li>AI cost and token monitoring</li><li>Model and provider visibility</li><li>Budgets and anomaly detection</li><li>Forecasts and scenario simulations</li><li>Quality-aware recommendations</li><li>Reports and integrations</li></ul></div>${productVisual()}</div></section><section id="forecasting" class="site-section feature-detail"><div class="site-wrap cap-grid"><article><h3>Monitor</h3><p>Track requests, tokens, attributed spend, latency, and model activity.</p></article><article><h3>Forecast</h3><p>Translate observed trends into forward-looking cost expectations.</p></article><article id="optimization"><h3>Optimize</h3><p>Find alternatives while keeping workload and quality needs visible.</p></article><article id="integrations"><h3>Integrate</h3><p>Import telemetry and connect supported provider workflows securely.</p></article></div></section>${finalCta()}`);
 const solutions = () => shell(`${pageHero('SOLUTIONS','AI cost intelligence for every decision-maker.','Give engineering, finance, and AI platform teams a shared, evidence-aware view of usage and spend.')}<section class="site-section"><div class="site-wrap solution-list"><article><span>01 / ENGINEERING</span><h2>Build with cost context.</h2><p>See how applications, models, tokens, and latency contribute to spend—without reducing technical decisions to price alone.</p></article><article><span>02 / FINOPS</span><h2>Bring AI into financial operations.</h2><p>Centralize attribution, budget monitoring, reporting, and forecasts for a category that changes quickly.</p></article><article><span>03 / AI LEADERSHIP</span><h2>Make model strategy measurable.</h2><p>Compare providers and models, evaluate tradeoffs, and plan infrastructure with clearer evidence.</p></article></div></section>${finalCta()}`);
-const pricing = () => shell(`${pageHero('PRICING','Pricing built around your AI operations.','CutAICost is currently onboarding organizations through a consultation-led process. We will scope access around your data, providers, and operating needs.')}<section class="site-section"><div class="site-wrap pricing-panel"><div><span>CONSULTATION-LED ACCESS</span><h2>Let’s understand your environment first.</h2><p>Tell us about your providers, workloads, and cost-management goals. We’ll discuss platform fit, onboarding, and pricing directly—without inventing a plan that may not match your needs.</p></div><a href="/book-demo" data-route class="button primary">Discuss Pricing ↗</a></div></section>${finalCta()}`);
+const pricing = () => shell(`${pageHero('PRICING','We charge a share of what we save you.','If TokenScope helps you reduce AI infrastructure spend by $1M this year, our fee is 20% ($200k). It pays for itself and preserves your upside.')}<section class="site-section"><div class="site-wrap pricing-panel"><div><span>SUCCESS-BASED PRICING</span><h2>20% of verified annual savings.</h2><ul class="check-list"><li>Aligned incentives: we win when you save.</li><li>Verification you can trust: based on attributed spend and agreed methodology.</li><li>No guesswork: clear examples and reporting each review period.</li></ul><div class="pricing-faq"><details><summary>How do you calculate savings?</summary><p>We start from your attributed AI spend baseline and compare against the same workloads after changes (prompt and output controls, routing, caching, provider/model selection). The method is agreed up front and documented.</p></details><details><summary>When are fees invoiced?</summary><p>Typically quarterly, based on realized and verified savings. For large initiatives we can use milestone checkpoints.</p></details><details><summary>What if spend grows while unit economics improve?</summary><p>We measure both totals and unit economics. Savings may be reflected as avoided cost against a growth baseline rather than just lower invoices.</p></details></div></div><a href="/book-demo" data-route class="button primary">Discuss Pricing ↗</a></div></section>${finalCta()}`);
 const about = () => {
   // Leadership-only view with gender icons; Joseph promoted to VP of Engineering
   const team = [
@@ -105,8 +105,66 @@ const about = () => {
   </section>`;
 
   return shell(`${pageHero('ABOUT CUTAICOST','AI should be powerful—not financially opaque.','CutAICost exists to help organizations understand and improve the economics of the AI systems they build and operate.')}<section class="site-section"><div class="site-wrap editorial-grid"><div><h2>Why we’re building CutAICost.</h2></div><div><p>AI infrastructure introduces a new kind of operational complexity: usage-based pricing, fast-moving model catalogs, multiple providers, and costs that can be difficult to connect back to business activity.</p><p>We built TokenScope to bring those signals into one place. Our focus is straightforward: help teams see what they spend, understand why, plan what comes next, and find responsible opportunities to optimize.</p><p>We believe cost decisions should preserve the context that matters—quality, reliability, workload needs, and organizational priorities.</p></div></div></section>${teamGrid}${finalCta()}`);
-}
+} 
 const contact = () => shell(`${pageHero('CONTACT','Start a conversation.','Whether you are exploring AI FinOps or already managing production model spend, we would like to understand what you are working on.')}<section class="site-section"><div class="site-wrap contact-grid"><a href="/book-demo" data-route><span>01</span><h2>Book a consultation</h2><p>Talk through your AI environment and cost-management goals.</p><b>Get started →</b></a><a href="/signup" data-route><span>02</span><h2>Request platform access</h2><p>Tell us about your organization and TokenScope use case.</p><b>Request access →</b></a><a href="/login" data-route><span>03</span><h2>Existing customer?</h2><p>Sign in to your private TokenScope workspace.</p><b>Sign in →</b></a></div></section>`);
+
+// Careers page
+const careersEmail = 'careers@cutaicost.com';
+const jobs = [
+  {
+    title: 'Data Analyst — Cloud Commitment & Risk Management',
+    comp: '$120k – $200k', type: 'Full Time', remote: 'Remote possible', 
+    locations: 'San Francisco · San Francisco Bay Area',
+    tags: ['Data Analyst','Cloud Commitments','Risk Management']
+  },
+  {
+    title: 'Senior Full Stack Engineer',
+    comp: '$150k – $200k', type: 'Full Time', remote: 'Remote possible',
+    locations: 'Boston · Chicago · New York City · United States',
+    tags: ['Full‑Stack Engineer','Python','JavaScript','Backend','AWS','Cloud Infra','Databricks']
+  },
+  {
+    title: 'Senior Data Platform Engineer',
+    comp: '$175k – $200k', type: 'Full Time', remote: 'Remote possible',
+    locations: 'Chicago · Los Angeles · New York City · San Francisco · United States',
+    tags: ['Data Engineer','Python','SQL','PostgreSQL','ETL','AWS','PySpark','Databricks','Delta Lake','RBAC']
+  },
+  {
+    title: 'Senior Solutions Architect – Pre‑Sales & AI FinOps',
+    comp: '$170k – $200k', type: 'Full Time', remote: 'Remote possible',
+    locations: 'Chicago · Los Angeles · New York City · San Francisco · United States',
+    tags: ['Solutions Architecture','Pre‑sales','SQL','Forecasting','Azure','AWS','TBM','Power BI','Tableau','Tokenomics']
+  },
+  {
+    title: 'Summer Internship (12 weeks, paid)',
+    comp: '$35/hr', type: 'Internship', remote: 'Remote possible',
+    locations: 'United States (select hubs preferred)',
+    tags: ['Internship','12 weeks','Paid']
+  }
+];
+
+const mailtoFor = (role) => {
+  const subject = encodeURIComponent(`Application: ${role}`);
+  const body = encodeURIComponent(
+`Hello CutAICost team,
+
+I’d like to apply for the ${role} role.
+
+Name:
+Email:
+LinkedIn/GitHub/Portfolio:
+Resume URL:
+Current location(s) and work authorization:
+
+A short note on why I’m a fit:
+
+—
+Submitted from cutaicost.com/careers`
+  );
+  return `mailto:${careersEmail}?subject=${subject}&body=${body}`;
+};
+
+const careers = () => shell(`${pageHero('CAREERS','Help teams make AI cost decisions with evidence.','We’re a lean, product‑focused company. We care about clarity, reliability, and building tools that earn trust.')}<section class="site-section"><div class="site-wrap"><div class="split-heading"><div class="site-eyebrow"><span></span>OPEN ROLES</div><h2>Join a small, senior team</h2></div><div class="careers-grid">${jobs.map(j=>`<article class="job-card"><header><h3>${e(j.title)}</h3><p class="job-meta"><b>${e(j.comp)}</b> · ${e(j.type)} · ${e(j.remote)}</p><p class="job-locations">${e(j.locations)}</p></header><div class="job-tags">${j.tags.map(t=>`<span>${e(t)}</span>`).join('')}</div><div class="job-actions"><a class="button secondary" href="${mailtoFor(j.title)}">Apply now ↗</a></div></article>`).join('')}</div></div></section>${finalCta()}`);
 
 export const posts = [
   {slug:'how-ai-api-pricing-works',title:'How AI API Pricing Actually Works',excerpt:'A practical guide to tokens, request fees, cached inputs, and the variables that shape AI infrastructure cost.',category:'AI Costs',date:'September 24, 2026',minutes:7},
@@ -268,13 +326,13 @@ const legal = (path) => {
 
 export function publicPage(path) {
   if (path.startsWith('/blog/')) { const post=posts.find(p=>`/blog/${p.slug}`===path); return post ? article(post) : null; }
-  return ({'/platform':platform,'/solutions':solutions,'/pricing':pricing,'/resources':resources,'/about':about,'/contact':contact,'/blog':blog,'/terms':()=>legal('/terms'),'/privacy':()=>legal('/privacy'),'/cookies':()=>legal('/cookies')})[path]?.() || null;
+  return ({'/platform':platform,'/solutions':solutions,'/pricing':pricing,'/resources':resources,'/about':about,'/contact':contact,'/blog':blog,'/careers':careers,'/terms':()=>legal('/terms'),'/privacy':()=>legal('/privacy'),'/cookies':()=>legal('/cookies')})[path]?.() || null;
 }
 
 export function setPageMeta(path) {
   document.querySelector('meta[name="robots"]')?.setAttribute('content', path.startsWith('/app') || path.startsWith('/admin') || path === '/login' ? 'noindex,nofollow' : 'index,follow');
-  const post=posts.find(p=>`/blog/${p.slug}`===path); const names={'/':'AI Cost Intelligence & Optimization','/platform':'TokenScope Platform','/solutions':'AI Cost Management Solutions','/pricing':'Pricing','/resources':'AI Cost Resources','/about':'About CutAICost','/contact':'Contact CutAICost','/blog':'AI FinOps Journal','/terms':'Terms of Service','/privacy':'Privacy Policy','/cookies':'Cookie Policy','/book-demo':'Book a Consultation','/demo':'Book a Consultation','/signup':'Request TokenScope Access','/register':'Request TokenScope Access','/login':'TokenScope Sign In'};
-  const descriptions={'/':'See, forecast, and optimize AI model and provider costs with CutAICost and its TokenScope platform.','/platform':'Explore TokenScope capabilities for AI cost monitoring, forecasting, optimization, budgets, anomalies, and reporting.','/solutions':'See how engineering, FinOps, and AI leaders use shared cost intelligence to make better infrastructure decisions.','/pricing':'Discuss TokenScope access, onboarding, and pricing for your organization’s AI environment.','/resources':'Practical guides to AI costs, forecasting, model economics, optimization, and AI FinOps.','/about':'Learn why CutAICost is building TokenScope to make AI infrastructure costs clearer and more actionable.','/contact':'Book a consultation, request TokenScope access, or sign in to an existing workspace.','/blog':'Practical perspectives from CutAICost on AI costs, FinOps, model decisions, forecasting, and optimization.','/terms':'Review the current draft terms for using CutAICost and TokenScope.','/privacy':'Learn what information CutAICost processes and how the current application handles customer data.','/cookies':'Learn about the essential cookies used by CutAICost and the absence of third-party public-site tracking.','/book-demo':'Discuss your AI costs, providers, telemetry, and optimization goals with CutAICost.','/demo':'Discuss your AI costs, providers, telemetry, and optimization goals with CutAICost.','/signup':'Request access to TokenScope, the AI cost intelligence platform from CutAICost.','/register':'Request access to TokenScope, the AI cost intelligence platform from CutAICost.','/login':'Sign in to your private TokenScope workspace.'};
+  const post=posts.find(p=>`/blog/${p.slug}`===path); const names={'/':'AI Cost Intelligence & Optimization','/platform':'TokenScope Platform','/solutions':'AI Cost Management Solutions','/pricing':'Pricing','/resources':'AI Cost Resources','/about':'About CutAICost','/contact':'Contact CutAICost','/blog':'AI FinOps Journal','/careers':'Careers','/terms':'Terms of Service','/privacy':'Privacy Policy','/cookies':'Cookie Policy','/book-demo':'Book a Consultation','/demo':'Book a Consultation','/signup':'Request TokenScope Access','/register':'Request TokenScope Access','/login':'TokenScope Sign In'};
+  const descriptions={'/':'See, forecast, and optimize AI model and provider costs with CutAICost and its TokenScope platform.','/platform':'Explore TokenScope capabilities for AI cost monitoring, forecasting, optimization, budgets, anomalies, and reporting.','/solutions':'See how engineering, FinOps, and AI leaders use shared cost intelligence to make better infrastructure decisions.','/pricing':'We charge 20% of verified annual savings—aligned incentives, transparent verification, and quarterly true‑ups.','/resources':'Practical guides to AI costs, forecasting, model economics, optimization, and AI FinOps.','/about':'Learn why CutAICost is building TokenScope to make AI infrastructure costs clearer and more actionable.','/contact':'Book a consultation, request TokenScope access, or sign in to an existing workspace.','/blog':'Practical perspectives from CutAICost on AI costs, FinOps, model decisions, forecasting, and optimization.','/careers':'Open roles at CutAICost—join a lean team building AI cost intelligence.','/terms':'Review the current draft terms for using CutAICost and TokenScope.','/privacy':'Learn what information CutAICost processes and how the current application handles customer data.','/cookies':'Learn about the essential cookies used by CutAICost and the absence of third-party public-site tracking.','/book-demo':'Discuss your AI costs, providers, telemetry, and optimization goals with CutAICost.','/demo':'Discuss your AI costs, providers, telemetry, and optimization goals with CutAICost.','/signup':'Request access to TokenScope, the AI cost intelligence platform from CutAICost.','/register':'Request access to TokenScope, the AI cost intelligence platform from CutAICost.','/login':'Sign in to your private TokenScope workspace.'};
   const title=post?.title || names[path] || 'CutAICost'; const description=post?.excerpt || descriptions[path] || descriptions['/']; const url=`https://cutaicost.com${path}`;
   document.title=`${title} | CutAICost`; document.querySelector('meta[name="description"]')?.setAttribute('content',description);
   document.querySelector('meta[property="og:title"]')?.setAttribute('content',`${title} | CutAICost`); document.querySelector('meta[property="og:description"]')?.setAttribute('content',description); document.querySelector('meta[property="og:url"]')?.setAttribute('content',url); document.querySelector('meta[property="og:type"]')?.setAttribute('content',post?'article':'website');

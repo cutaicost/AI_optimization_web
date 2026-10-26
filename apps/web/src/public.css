@@ -47,3 +47,17 @@
 #team .split-heading{justify-items:center;text-align:center}
 #team .split-heading h2{margin-left:auto;margin-right:auto}
 #team .split-heading .site-eyebrow{justify-self:center}
+
+/* Careers: openings grid and job cards */
+.careers-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+.job-card{display:flex;flex-direction:column;gap:14px;padding:18px 20px;border:1px solid #3a3242;background:linear-gradient(180deg,#16111e,#0f0b16);border-radius:14px}
+.job-card header h3{margin:0 0 6px;font-size:20px;line-height:1.25}
+.job-card .job-meta{margin:0;color:#9b95a3;font-size:13px}
+.job-card .job-meta b{color:#ded8e5;font-weight:600}
+.job-card .job-locations{margin:6px 0 0;color:#827b88;font-size:12px}
+.job-card .job-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.job-card .job-tags span{display:inline-block;padding:6px 9px;border:1px solid #2a2430;background:rgba(24,20,30,.6);border-radius:999px;color:#cfc8d8;font-size:12px;line-height:1}
+.job-card .job-actions{margin-top:auto;display:flex;justify-content:flex-end}
+.job-card .button.secondary{padding:10px 12px}
+@media(max-width:900px){.careers-grid{grid-template-columns:1fr}.job-card header h3{font-size:19px}}
+@media(max-width:700px){.job-card header h3{font-size:18px}.job-card .job-meta{font-size:12px}}
