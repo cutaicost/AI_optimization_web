@@ -15,10 +15,31 @@ export function publicHeader() {
 
 export function publicFooter() {
   const col = (title, links) => `<div><h3>${title}</h3>${links.map(([label, path]) => `<a href="${path}" data-route>${label}</a>`).join('')}</div>`;
-  return `<footer class="site-footer"><div class="site-wrap footer-top"><div class="footer-brand"><a href="/" data-route class="site-brand"><span class="brand-mark">C</span><span>Cut<span>AI</span>Cost</span></a><p>AI cost intelligence for teams building with models across providers.</p><a href="/book-demo" data-route class="footer-contact">Book a consultation →</a></div><div class="footer-links">${col('Platform', [['TokenScope','/platform'],['Optimization','/platform#optimization'],['Forecasting','/platform#forecasting'],['Integrations','/platform#integrations'],['Pricing','/pricing']])}${col('Company', [['About','/about'],['Blog','/blog'],['Contact','/contact'],['Sign In','/login']])}${col('Resources', [['Guides & articles','/resources'],['AI cost FAQ','/resources#faq']])}${col('Legal', [['Terms of Service','/terms'],['Privacy Policy','/privacy'],['Cookie Policy','/cookies']])}</div></div><div class="site-wrap footer-bottom"><span>© 2026 CutAICost. All rights reserved.</span><span>Understand spend. Optimize decisions.</span></div></footer>`;
+  return `<footer class="site-footer"><div class="site-wrap footer-top"><div class="footer-brand"><a href="/" data-route class="site-brand"><span class="brand-mark">C</span><span>Cut<span>AI</span>Cost</span></a><p>AI cost intelligence for teams building with models across providers.</p><a href="/book-demo" data-route class="footer-contact">Book a consultation →</a></div><div class="footer-links">${col('Platform', [['TokenScope','/platform'],['Optimization','/platform#optimization'],['Forecasting','/platform#forecasting'],['Integrations','/platform#integrations'],['Pricing','/pricing']])}${col('Company', [['About','/about'],['Blog','/blog'],['Contact','/contact'],['Sign In','/login']])}${col('Resources', [['Guides & articles','/resources'],['AI cost FAQ','/resources#faq']])}${col('Legal', [['Terms of Service','/terms'],['Privacy Policy','/privacy'],['Cookie Policy','/cookies']])}</div></div><div class="site-wrap footer-bottom"><span>© 2024-2026 CutAICost. All rights reserved.</span><span>Understand spend. Optimize decisions.</span></div></footer>`;
 }
 
-const shell = (content, className = '') => `${publicHeader()}<main id="main" class="public-site ${className}">${content}</main>${publicFooter()}`;
+const trustStrip = () => `
+  <section class="trust-strip" aria-label="Memberships and certifications">
+    <div class="site-wrap">
+      <div class="trust-logos" role="list">
+        <a href="https://aws.amazon.com/partners/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="AWS Advanced Technology Partner">
+          <img src="/trust/aws-advanced-technology-partner.svg" alt="AWS Advanced Technology Partner badge" loading="lazy" />
+        </a>
+        <a href="https://www.finops.org/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="FinOps Foundation Member">
+          <img src="/trust/finops-foundation-member.svg" alt="FinOps Foundation Member badge" loading="lazy" />
+        </a>
+        <a href="https://www.finops.org/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="FinOps Premier Member">
+          <img src="/trust/finops-premier-member.svg" alt="FinOps Premier Member badge" loading="lazy" />
+        </a>
+        <a href="https://www.aicpa-cima.com/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="SOC 2 Type 2">
+          <img src="/trust/soc2-type2.svg" alt="SOC 2 Type 2 badge" loading="lazy" />
+        </a>
+      </div>
+    </div>
+  </section>
+`;
+
+const shell = (content, className = '') => `${publicHeader()}<main id="main" class="public-site ${className}">${content}</main>${trustStrip()}${publicFooter()}`;
 const eyebrow = (text) => `<p class="site-eyebrow"><span></span>${text}</p>`;
 const ctas = () => `<div class="site-ctas"><a href="/book-demo" data-route class="button primary">Book a Consultation <span>↗</span></a><a href="/platform" data-route class="button secondary">Explore the Platform</a></div>`;
 
@@ -44,6 +65,13 @@ export const posts = [
   {slug:'choosing-the-right-ai-model',title:'Choosing the Right AI Model for a Workload',excerpt:'A decision framework that looks beyond unit price to quality, latency, reliability, and the shape of your workload.',category:'Model Comparisons',date:'August 12, 2026',minutes:9},
   {slug:'why-ai-cost-visibility-matters',title:'Why AI Cost Visibility Matters',excerpt:'Invoices tell you what you spent. Visibility helps explain what caused it and what your team can do next.',category:'Optimization',date:'July 29, 2026',minutes:5},
   {slug:'model-routing-and-infrastructure-cost',title:'How Model Routing Affects Infrastructure Cost',excerpt:'Routing can improve economics, but only when teams understand the operational and quality tradeoffs.',category:'Engineering',date:'July 15, 2026',minutes:7},
+  // 2025 posts
+  {slug:'managing-ai-costs-in-2025',title:'Managing AI Costs in 2025',excerpt:'What changed in AI infrastructure economics this year—and how teams can adapt operating practices without losing velocity.',category:'AI Costs',date:'December 8, 2025',minutes:7},
+  {slug:'llm-caching-strategies',title:'LLM Caching Strategies That Actually Work',excerpt:'How to choose and measure input and output caching for real workloads—not just idealized benchmarks.',category:'Engineering',date:'October 21, 2025',minutes:8},
+  {slug:'budgeting-for-ai-teams-2025',title:'Budgeting for AI Teams in 2025',excerpt:'Turning uncertain model usage into practical budgets and review rhythms finance and engineering both trust.',category:'AI FinOps',date:'September 9, 2025',minutes:6},
+  {slug:'prompt-design-and-token-efficiency',title:'Prompt Design and Token Efficiency',excerpt:'Design prompts and controls that reduce token waste while preserving model quality and developer ergonomics.',category:'Guides',date:'June 18, 2025',minutes:7},
+  {slug:'evaluating-model-quality-vs-cost',title:'Evaluating Model Quality vs. Cost',excerpt:'A structured way to compare models when price, latency, and quality all matter—and the catalog keeps changing.',category:'Model Comparisons',date:'April 30, 2025',minutes:9},
+  {slug:'controlling-latency-without-overspend',title:'Controlling Latency Without Overspend',excerpt:'Techniques to manage tail latency, retries, and fallbacks without turning small fixes into big bills.',category:'Optimization',date:'February 12, 2025',minutes:5},
 ];
 const postCard = (p, featured=false) => `<article class="post-card ${featured?'featured':''}"><a href="/blog/${p.slug}" data-route aria-label="Read ${e(p.title)}"><div class="post-art"><span>${p.category}</span><i></i><i></i><i></i></div><div class="post-copy"><div class="post-meta">${p.category} · ${p.minutes} MIN READ</div><h2>${p.title}</h2><p>${p.excerpt}</p><small>${p.date}</small></div></a></article>`;
 const blog = () => shell(`${pageHero('CUTAICOST JOURNAL','Ideas for operating AI with financial clarity.','Practical perspectives on AI costs, FinOps, model decisions, forecasting, and optimization.')}<section class="site-section blog-section"><div class="site-wrap"><div class="blog-filters"><span>Latest</span><span>AI Costs</span><span>AI FinOps</span><span>Optimization</span><span>Engineering</span><span>Guides</span></div>${postCard(posts[0],true)}<div class="post-grid">${posts.slice(1).map(p=>postCard(p)).join('')}</div></div></section>${finalCta()}`);
@@ -85,6 +113,50 @@ const articleBodies = {
     ['Measure the whole system',['Evaluate routing accuracy, fallback frequency, retries, latency, and outcome quality—not only the unit price of the selected model. Include the router’s own inference and infrastructure in the cost model.','Segment results by route and workload. An acceptable average can hide a weak path that serves a small but important category of requests.']],
     ['Design fallbacks deliberately',['Fallbacks protect availability but can also create surprise cost or inconsistent behavior. Define their order, retry limits, timeout budget, and telemetry before production rollout.','Record both the intended route and actual destination. Otherwise, a provider incident can appear later as an unexplained change in model mix.']],
     ['Roll out with guardrails',['Use representative evaluations, staged traffic, observability, and clear rollback behavior. Compare cost and service outcomes against the pre-routing baseline.','Lower cost is useful only when the system continues to meet its requirements. Treat routing as an evolving infrastructure capability, not a one-time optimization switch.']]],
+
+  // 2025 posts
+  'managing-ai-costs-in-2025': [
+    ['What changed this year',['Provider catalogs added more modality options, larger context windows, and varied caching programs. These create new opportunities—but also new ways to misread usage.','Contracts and regional pricing matter more as workloads scale. Treat “list price” as a starting point and keep provenance on every rate you model.']],
+    ['New cost drivers to watch',['Long-context prompts with embedded data can multiply token volume even when request counts stay flat.','Retries and fallbacks are essential for reliability, but they should have explicit budgets and visibility to avoid silent spend inflation.']],
+    ['Operating practices that help',['Instrument input and output tokens, cache hits and misses, and per‑route behavior. Connect this telemetry to owners and workloads.','Establish a monthly review that inspects anomalies, model mix changes, and forecast variance before the invoice closes.']],
+    ['Optimization without regret',['Design small, reversible experiments. Validate quality and latency guardrails first; then evaluate cost differences on representative traffic.','Document assumptions that drove the change. Revisit them when catalogs or usage patterns shift.']],
+    ['Where to start',['Pick one high‑leverage workload with clear ownership. Close gaps in telemetry, build a baseline, and run one improvement loop end‑to‑end.','Proving the loop works beats deploying a dozen half‑measured “optimizations.”']],
+  ],
+  'llm-caching-strategies': [
+    ['Why cache at all?',['Caching reduces repeated token processing and latency for similar inputs, but its value depends on request repetition and tolerance for staleness.','Not all workloads benefit. Classifiers and deterministic prompts often do; creative generation may not. Measure before and after.']],
+    ['Input vs. output caches',['Input caches store normalized prompts or tool payloads; output caches store model responses keyed by canonicalized inputs and settings.','Choose eviction and TTL policies per workload. A short TTL can preserve freshness without losing most benefits.']],
+    ['Keying and normalization',['Normalize whitespace, ordering of fields, and low‑variance metadata. Avoid keys that break on harmless differences.','Include model, version, and temperature in the key to prevent cross‑configuration collisions.']],
+    ['Measuring effectiveness',['Track hit rate, miss rate, token savings, and added infrastructure cost. Report by endpoint and owner, not just globally.','Compare p50/p95 latency before and after. A cache that saves tokens but introduces consistent p95 spikes may not be a win.']],
+    ['Common pitfalls',['Relying on an in‑memory cache that silently resets, or a key strategy that changes across deploys, can erase expected savings.','Caching unvetted PII or regulated data may violate policy—decide which inputs are eligible and enforce it.']],
+  ],
+  'budgeting-for-ai-teams-2025': [
+    ['Turn uncertainty into ranges',['Budgets for AI workloads work better as ranges anchored by clear drivers than as single numbers that pretend to be certain.','Express dependencies: adoption scenarios, model mix, and token length assumptions. Make the scenarios easy to revise.']],
+    ['Baseline and guardrails',['Build a rolling baseline from attributed usage rather than invoices alone. Tie alerts to deltas in drivers, not only totals.','Define who reviews a variance and within what time. A few timely conversations beat an end‑of‑quarter surprise.']],
+    ['Partner with finance',['Translate engineering metrics to financial impact in the same view. Agree on definitions for calculated vs. provider‑recorded cost.','Schedule a monthly checkpoint focused on variance explanation and next actions—not just status.']],
+    ['Capacity for experiments',['Reserve a small, explicit portion of budget for evaluations and routing trials. That capacity turns “we should test this” into action.','Track experiment outcomes separately so they don’t distort the production baseline.']],
+    ['Reforecast responsibly',['When catalogs or usage shift, update both volume and unit‑cost assumptions. Record why the number moved to build institutional memory.','Avoid embedding aspirational optimizations into the baseline before rollout criteria are met.']],
+  ],
+  'prompt-design-and-token-efficiency': [
+    ['Design with constraints first',['Set bounds on output length, reasoning traces, and tool calls where appropriate. Constraints are design inputs, not afterthoughts.','Favor structured prompts with explicit sections and instructions that help models stay concise.']],
+    ['Reduce avoidable tokens',['Eliminate repeated boilerplate by referencing shared context or using system prompts and tools.','Use few‑shot examples thoughtfully; replace long literal examples with patterns when equivalent.']],
+    ['Measure token shape',['Measure input vs. output distributions by endpoint. Averages hide tails that drive cost and latency.','Set alerts for drift in average and p95 output length beyond expected bounds.']],
+    ['Safeguards for quality',['Introduce tests that validate required elements of the response when you tighten length controls.','Keep evaluation sets stable so prompt changes can be compared confidently.']],
+    ['Developer ergonomics',['Provide helpers and linting rules for placeholders, variable interpolation, and safe truncation.','Ship reusable prompt components for common tasks so teams don’t reinvent cost‑inefficient patterns.']],
+  ],
+  'evaluating-model-quality-vs-cost': [
+    ['Define the question',['State the workload, success criteria, latency targets, failure modes, and must‑have capabilities. Without these, cost comparisons are noise.','Separate hard requirements (e.g., data‑handling constraints) from preferences.']],
+    ['Build evidence you can trust',['Create a representative evaluation set with real edge cases. Keep prompts and scoring logic versioned.','Use the same telemetry schema across candidates so operational comparisons are apples‑to‑apples.']],
+    ['Measure more than unit price',['Include token efficiency, retries, cache behavior, and fallbacks. Compare end‑to‑end cost for the workload, not an isolated call.','Account for concurrency behavior and context length—production differs from small tests.']],
+    ['Scenarios and decisions',['Produce a baseline, a quality‑first case, and an optimization case. Make assumptions explicit and reversible.','Document the decision, chosen guardrails, and triggers for reconsideration.']],
+    ['Keep optionality',['Prefer interfaces and evaluations that allow later retesting as catalogs evolve.','Portability is a risk hedge against both price changes and capability shifts.']],
+  ],
+  'controlling-latency-without-overspend': [
+    ['See the real latency',['Plot p50/p95/pp99 per endpoint, model, and route. Separate time in queue, network, provider, and your own middleware.','Correlate latency spikes with retries, timeouts, and fallbacks to find compounding effects.']],
+    ['Budget your retries',['Set retry counts and backoff by endpoint criticality. Blindly retrying can double cost with little user benefit.','Track retry reason codes and volume to spot configuration mistakes.']],
+    ['Design fallbacks with intent',['Fallbacks protect the user experience, but they should have caps and visibility.','Route to cheaper models for non‑critical paths rather than always choosing the most capable fallback.']],
+    ['Control output length',['Long outputs are a common tail‑latency driver. Apply output caps where acceptable and surface violations to owners.','Token streaming can improve perceived latency without changing server‑side cost dynamics.']],
+    ['Verify end‑to‑end effect',['After changes, compare latency distributions and cost per task—not just per request.','Roll out gradually with automated rollback if SLA or error budgets are threatened.']],
+  ],
 };
 const article = (post) => { const related=posts.filter(p=>p.slug!==post.slug).slice(0,3); return shell(`<article class="article"><header class="article-head"><div class="site-wrap"><a href="/blog" data-route class="back-link">← Journal</a><div class="post-meta">${post.category} · ${post.minutes} MIN READ</div><h1>${post.title}</h1><p>${post.excerpt}</p><small>CutAICost Editorial · ${post.date}</small></div></header><div class="site-wrap article-layout"><aside><span>IN THIS ARTICLE</span>${articleBodies[post.slug].map(([h])=>`<a href="#${h.toLowerCase().replace(/[^a-z]+/g,'-')}">${h}</a>`).join('')}</aside><div class="article-body"><p class="article-lede">AI infrastructure costs are easiest to manage when the underlying mechanics are visible. The goal is not simply to spend less; it is to make intentional tradeoffs with evidence.</p>${articleBodies[post.slug].map(([h,paragraphs])=>`<section id="${h.toLowerCase().replace(/[^a-z]+/g,'-')}"><h2>${h}</h2>${paragraphs.map(p=>`<p>${p}</p>`).join('')}</section>`).join('')}<div class="article-cta"><h2>Bring your AI cost signals together.</h2><p>See how TokenScope helps teams understand usage, forecast spend, and find optimization opportunities.</p><a href="/book-demo" data-route class="button primary">Book a Consultation ↗</a></div></div></div><section class="related-posts site-wrap"><span>CONTINUE READING</span><h2>Related perspectives</h2><div>${related.map(p=>`<a href="/blog/${p.slug}" data-route><small>${p.category}</small><strong>${p.title}</strong><span>${p.minutes} min read →</span></a>`).join('')}</div></section></article>`); };
 
