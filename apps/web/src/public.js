@@ -22,17 +22,30 @@ const trustStrip = () => `
   <section class="trust-strip" aria-label="Memberships and certifications">
     <div class="site-wrap">
       <div class="trust-logos" role="list">
-        <a href="https://aws.amazon.com/partners/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="AWS Advanced Technology Partner">
-          <img src="/trust/aws-advanced-technology-partner.svg" alt="AWS Advanced Technology Partner badge" loading="lazy" />
+        <a href="https://aws.amazon.com/partners/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="AWS Advanced Technology Partner" class="logo-link aws">
+          <picture>
+            <source type="image/svg+xml" srcset="/trust/aws-advanced-technology-partner.svg" />
+            <img class="logo aws" src="/trust/aws-advanced-technology-partner.png" alt="AWS Advanced Technology Partner badge" loading="lazy" decoding="async" fetchpriority="low" />
+          </picture>
         </a>
-        <a href="https://www.finops.org/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="FinOps Foundation Member">
-          <img src="/trust/finops-foundation-member.svg" alt="FinOps Foundation Member badge" loading="lazy" />
+        <a href="https://www.finops.org/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="FinOps Foundation Member" class="logo-link finops-foundation">
+          <picture>
+            <source type="image/svg+xml" srcset="/trust/finops-foundation-member.svg" />
+            <img class="logo finops-foundation" src="/trust/finops-foundation-member.png" alt="FinOps Foundation Member badge" loading="lazy" decoding="async" fetchpriority="low" />
+          </picture>
         </a>
-        <a href="https://www.finops.org/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="FinOps Premier Member">
-          <img src="/trust/finops-premier-member.svg" alt="FinOps Premier Member badge" loading="lazy" />
+        <a href="https://www.finops.org/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="FinOps Premier Member" class="logo-link finops-premier">
+          <picture>
+            <source type="image/svg+xml" srcset="/trust/finops-premier-member.svg" />
+            <img class="logo finops-premier" src="/trust/finops-premier-member.svg" alt="FinOps Premier Member badge" loading="lazy" decoding="async" fetchpriority="low" />
+          </picture>
         </a>
-        <a href="https://www.aicpa-cima.com/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="SOC 2 Type 2">
-          <img src="/trust/soc2-type2.svg" alt="SOC 2 Type 2 badge" loading="lazy" />
+        <a href="https://www.aicpa-cima.com/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="SOC 2 Type 2" class="logo-link soc2">
+          <picture>
+            <source type="image/webp" srcset="/trust/soc2-type2.webp" />
+            <source type="image/svg+xml" srcset="/trust/soc2-type2.svg" />
+            <img class="logo soc2" src="/trust/soc2-type2.svg" alt="SOC 2 Type 2 badge" loading="lazy" decoding="async" fetchpriority="low" />
+          </picture>
         </a>
       </div>
     </div>

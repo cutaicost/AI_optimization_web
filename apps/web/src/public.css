@@ -6,7 +6,12 @@
 /* Trust strip (logos above the footer) */
 .trust-strip{padding:56px 0;border-top:1px solid #19161d;border-bottom:1px solid #19161d;background:linear-gradient(180deg, rgba(12,9,17,0.6), rgba(12,9,17,0.6))}
 .trust-strip .site-wrap{display:flex;align-items:center;justify-content:center}
-.trust-logos{display:flex;gap:4px;align-items:center;flex-wrap:nowrap;justify-content:center}
-.trust-logos img{display:block;height:144px;width:auto;object-fit:contain;filter:none}
-@media (max-width:900px){.trust-logos{gap:6px;flex-wrap:wrap}.trust-logos img{height:96px}}
-@media (max-width:700px){.trust-strip{padding:40px 0}.trust-logos{gap:4px}.trust-logos img{height:72px}}
+.trust-logos{display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center}
+.trust-logos .logo{display:block;height:auto;width:auto;object-fit:contain;filter:none;max-height:64px}
+/* Optical balancing per brand */
+.trust-logos .logo.aws{max-height:88px}
+.trust-logos .logo.finops-foundation{max-height:64px}
+.trust-logos .logo.finops-premier{max-height:64px}
+.trust-logos .logo.soc2{max-height:60px}
+@media (max-width:900px){.trust-logos{gap:10px}.trust-logos .logo{max-height:56px}.trust-logos .logo.aws{max-height:78px}}
+@media (max-width:700px){.trust-strip{padding:40px 0}.trust-logos{gap:8px}.trust-logos .logo{max-height:48px}.trust-logos .logo.aws{max-height:68px}}
