@@ -61,3 +61,8 @@
 .job-card .button.secondary{padding:10px 12px}
 @media(max-width:900px){.careers-grid{grid-template-columns:1fr}.job-card header h3{font-size:19px}}
 @media(max-width:700px){.job-card header h3{font-size:18px}.job-card .job-meta{font-size:12px}}
+
+/* Careers: spacing between heading and openings */
+.split-heading+.careers-grid{margin-top:22px}
+@media(max-width:900px){.split-heading+.careers-grid{margin-top:18px}}
+@media(max-width:700px){.split-heading+.careers-grid{margin-top:16px}}
