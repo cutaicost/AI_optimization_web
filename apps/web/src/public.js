@@ -19,28 +19,24 @@ export function publicFooter() {
 }
 
 const trustStrip = () => `
-  <section class="trust-strip" aria-label="Memberships and certifications">
+  <section class="trust-strip" aria-label="Partnerships and certifications">
     <div class="site-wrap">
-      <div class="trust-logos" role="list">
-        <a href="https://aws.amazon.com/partners/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="AWS Partner" class="logo-link aws">
-          <picture>
-            <img class="logo aws" src="/trust/aws-partner.png" alt="AWS Partner badge" loading="lazy" decoding="async" fetchpriority="low" />
-          </picture>
+      <div class="trust-badges" role="list" aria-label="Partnerships list">
+        <a href="https://aws.amazon.com/partners/" target="_blank" rel="noopener noreferrer" role="listitem" class="badge" aria-label="AWS Advanced Technology Partner">
+          <small>Partner</small>
+          <span>AWS Advanced Technology</span>
         </a>
-        <a href="https://www.finops.org/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="FinOps Foundation Member" class="logo-link finops-foundation">
-          <picture>
-            <img class="logo finops-foundation" src="/trust/finops-foundation-member.png" alt="FinOps Foundation Member badge" loading="lazy" decoding="async" fetchpriority="low" />
-          </picture>
+        <a href="https://www.finops.org/" target="_blank" rel="noopener noreferrer" role="listitem" class="badge" aria-label="FinOps Foundation Member">
+          <small>Member</small>
+          <span>FinOps Foundation</span>
         </a>
-        <a href="https://www.finops.org/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="FinOps Premier Member" class="logo-link finops-premier">
-          <picture>
-            <img class="logo finops-premier" src="/trust/finops-premier-member.png" alt="FinOps Premier Member badge" loading="lazy" decoding="async" fetchpriority="low" />
-          </picture>
+        <a href="https://www.finops.org/" target="_blank" rel="noopener noreferrer" role="listitem" class="badge" aria-label="FinOps Premier Member">
+          <small>Premier</small>
+          <span>FinOps Foundation</span>
         </a>
-        <a href="https://www.aicpa-cima.com/" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="SOC 2 Type 2" class="logo-link soc2">
-          <picture>
-            <img class="logo soc2" src="/trust/soc2-type2.png" alt="SOC 2 Type 2 badge" loading="lazy" decoding="async" fetchpriority="low" />
-          </picture>
+        <a href="https://www.aicpa-cima.com/" target="_blank" rel="noopener noreferrer" role="listitem" class="badge" aria-label="SOC 2 Type 2 compliant">
+          <small>Security</small>
+          <span>SOC 2 Type 2</span>
         </a>
       </div>
     </div>
