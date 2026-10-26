@@ -318,10 +318,12 @@ const resources = () => shell(`${pageHero('RESOURCES','Guides, FAQs, and updates
       </div>
       <div>
         <ul>
-          <li><strong>Careers page</strong> — Open roles and internship added with on‑site apply (October 2026).</li>
-          <li><strong>Pricing update</strong> — Success‑based model: 20% of verified annual savings (October 2026).</li>
-          <li><strong>About</strong> — Leadership section refined with clearer avatars and layout (October 2026).</li>
-          <li><strong>Journal</strong> — Expanded 2025 articles with deeper sections and examples.</li>
+          <li><strong>Telemetry & forecasting</strong> — Improved model pricing catalog sync and forecast drivers (March 2026).</li>
+          <li><strong>Pricing update</strong> — Success‑based model: 20% of verified annual savings (January 2026).</li>
+          <li><strong>Careers page</strong> — Open roles and internship added with direct on‑site apply (January 2026).</li>
+          <li><strong>AWS Partner + SOC 2</strong> — Achieved AWS Partner status and SOC 2 Type II compliance (November 2025).</li>
+          <li><strong>Journal</strong> — Expanded 2025 articles with deeper sections and examples (October 2025).</li>
+          <li><strong>Guides published</strong> — Initial evergreen guides for cost calculation, forecasting, and integrations (September 2025).</li>
         </ul>
       </div>
     </div>
